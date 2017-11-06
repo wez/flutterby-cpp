@@ -1,0 +1,2 @@
+[workspace]
+members = ["atdf2cpp"]
