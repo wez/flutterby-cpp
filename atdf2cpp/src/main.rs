@@ -288,8 +288,18 @@ fn genmcu(mcu: &avr_mcu::Mcu) -> std::io::Result<()> {
 
     writeln!(mcu_def, "#ifdef HAVE_SIMAVR")?;
     writeln!(mcu_def, "#include <simavr/avr/avr_mcu_section.h>")?;
-    writeln!(mcu_def ,"__attribute__((used))")?;
+    writeln!(mcu_def, "__attribute__((used))")?;
     writeln!(mcu_def, "AVR_MCU_LONG(AVR_MMCU_TAG_FREQUENCY, F_CPU);")?;
+    writeln!(mcu_def, "__attribute__((used))")?;
+    writeln!(
+        mcu_def,
+        "const struct avr_mmcu_string_t _mmu_name _MMCU_ = {{ \
+         AVR_MMCU_TAG_NAME,\
+         sizeof(struct avr_mmcu_string_t) - 2,\
+         {{ \"{}\" }}\
+         }};",
+        mcu.device.name.to_ascii_lowercase()
+    )?;
     if let Some(simavr_console_reg) = simavr_console_reg {
         writeln!(mcu_def, "/// Simavr console")?;
         writeln!(
@@ -300,7 +310,7 @@ fn genmcu(mcu: &avr_mcu::Mcu) -> std::io::Result<()> {
             simavr_console_reg
         )?;
 
-        writeln!(mcu_def ,"__attribute__((used))")?;
+        writeln!(mcu_def, "__attribute__((used))")?;
         writeln!(mcu_def, "AVR_MCU_SIMAVR_CONSOLE({});", simavr_console_reg)?;
     }
 
@@ -313,7 +323,7 @@ fn genmcu(mcu: &avr_mcu::Mcu) -> std::io::Result<()> {
             placement(simavr_command_reg).unwrap(),
             simavr_command_reg
         )?;
-        writeln!(mcu_def ,"__attribute__((used))")?;
+        writeln!(mcu_def, "__attribute__((used))")?;
         writeln!(mcu_def, "AVR_MCU_SIMAVR_COMMAND({});", simavr_command_reg)?;
     }
 

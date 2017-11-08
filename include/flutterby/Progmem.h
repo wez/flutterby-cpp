@@ -20,10 +20,16 @@ inline typename enable_if<sizeof(U) == 1, U>::type progmem_deref(const U* ptr) {
 template <typename U>
 inline typename enable_if<sizeof(U) == 2, U>::type progmem_deref(const U* ptr) {
   U result;
+  // using "al" as the output constraint here because, when using "r",
+  // the compiler sometimes chooses to use one of the registers that
+  // comprises Z which emits an asm warning (but not error!).
+  // "al" gives us registers in the range 0-23.
+  // http://www.atmel.com/webdoc/avrlibcreferencemanual/inline_asm_1io_ops.html
+  // describes the register constraints.
   __asm__ __volatile__(
       "lpm %A[retval], Z+;\n\t"
       "lpm %B[retval], Z;\n\t"
-      : [retval] "=r"(result)
+      : [retval] "=al"(result)
       : "z"(ptr)
       :);
   return result;
@@ -36,7 +42,7 @@ inline typename enable_if<sizeof(U) == 3, U>::type progmem_deref(const U* ptr) {
       "lpm %A[retval], Z+;\n\t"
       "lpm %B[retval], Z+;\n\t"
       "lpm %C[retval], Z;\n\t"
-      : [retval] "=r"(result)
+      : [retval] "=al"(result)
       : "z"(ptr)
       :);
   return result;
@@ -50,7 +56,7 @@ inline typename enable_if<sizeof(U) == 4, U>::type progmem_deref(const U* ptr) {
       "lpm %B[retval], Z+;\n\t"
       "lpm %C[retval], Z+;\n\t"
       "lpm %D[retval], Z;\n\t"
-      : [retval] "=r"(result)
+      : [retval] "=al"(result)
       : "z"(ptr)
       :);
   return result;
