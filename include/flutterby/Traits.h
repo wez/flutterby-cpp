@@ -62,4 +62,19 @@ template <class T>
 struct enable_if<true, T> {
   using type = T;
 };
+
+template <typename T, T v> struct integral_constant {
+  static constexpr const T value = v;
+};
+struct false_type : integral_constant<bool, false> {};
+struct true_type : integral_constant<bool, true> {};
+
+template <typename T, typename U>
+struct is_same final : false_type {};
+
+template <typename T>
+struct is_same<T, T> final : true_type {};
+
+template <typename T, typename U>
+constexpr const bool is_same_v = is_same<T, U>::value;
 }

@@ -14,7 +14,7 @@ struct integer_sequence {
 };
 
 template <size_t... Ints>
-using index_sequence = clacker::integer_sequence<size_t, Ints...>;
+using index_sequence = flutterby::integer_sequence<size_t, Ints...>;
 
 namespace detail {
 template <size_t N, size_t... Ints>
@@ -22,7 +22,7 @@ struct make_index_sequence
     : detail::make_index_sequence<N - 1, N - 1, Ints...> {};
 
 template <size_t... Ints>
-struct make_index_sequence<0, Ints...> : clacker::index_sequence<Ints...> {};
+struct make_index_sequence<0, Ints...> : flutterby::index_sequence<Ints...> {};
 }
 
 template <size_t N>
