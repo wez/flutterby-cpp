@@ -10,9 +10,13 @@ rust-deps:
 target/simrunner: simrunner/main.cpp
 	$(CXX) -std=c++11 -o $@ -lsimavr -lelf $<
 
-target/blink.elf: examples/blink.cpp include/flutterby/bitflags.h target/atmega32u4.h
+# TODO: proper library build
+target/lib$(MCU).o: $(wildcard lib/*.cpp)
+	avr-g++ $(AVR_CXXFLAGS) -c -o $@ $^
+
+target/blink.elf: examples/blink.cpp include/flutterby/bitflags.h target/atmega32u4.h target/lib$(MCU).o
 	mkdir -p target
-	avr-g++ $(AVR_CXXFLAGS) -o $@ $< simrunner/testmain.cpp
+	avr-g++ $(AVR_CXXFLAGS) -o $@ $< target/lib$(MCU).o simrunner/testmain.cpp
 	avr-size --format=avr --mcu=$(MCU) $@
 
 sim: target/blink.elf target/simrunner
@@ -23,9 +27,9 @@ target/testmain.o: simrunner/testmain.cpp
 	avr-g++ $(AVR_CXXFLAGS) -c -o $@ $<
 
 .PHONY: t
-t: target/simrunner target/testmain.o
+t: target/simrunner target/testmain.o target/lib$(MCU).o
 	mkdir -p target/tests
-	for t in tests/*.cpp ; do  avr-g++ $(AVR_CXXFLAGS) -o target/$$t.elf $$t target/testmain.o && target/simrunner target/$$t.elf ; done
+	for t in tests/*.cpp ; do  avr-g++ $(AVR_CXXFLAGS) target/lib$(MCU).o -o target/$$t.elf $$t target/testmain.o && target/simrunner target/$$t.elf ; done
 
 #simavr -m $(MCU) -f $(F_CPU) -v -v -v -v -v target/blink.elf
 

@@ -45,8 +45,6 @@ int main() {
   s << Wut2 << " "_P << -123 << " woah there\r\n"_P;
 #endif
 
-  EXPECT(0 == 1);
-
 #if 1
   s<< "pointer-to-member-deref"_P <<Food->*(&Foo::baz) << "\r\n"_P;
   auto local = *Food;

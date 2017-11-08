@@ -287,4 +287,6 @@ ProgMemRange<char> operator"" _P() {
   array({Chars...});
   return ProgMemRange<Char>(array.begin(), array.end());
 }
+
+using FlashString = ProgMemRange<char>;
 }
