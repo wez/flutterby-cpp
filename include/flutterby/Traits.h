@@ -77,4 +77,56 @@ struct is_same<T, T> final : true_type {};
 
 template <typename T, typename U>
 constexpr const bool is_same_v = is_same<T, U>::value;
+
+template <class T>
+struct is_void : public false_type {};
+
+template<> struct is_void<void> : public true_type {};
+template<> struct is_void<const void> : public true_type{};
+template<> struct is_void<const volatile void> : public true_type{};
+template<> struct is_void<volatile void> : public true_type{};
+
+template <class T>
+struct is_rvalue_reference : public false_type {};
+template <class T>
+struct is_rvalue_reference<T&&> : public true_type {};
+
+template <class T>
+struct is_lvalue_reference : public false_type {};
+template <class T>
+struct is_lvalue_reference<T&> : public true_type {};
+
+template <class T> struct is_reference
+   : public
+   integral_constant<
+      bool,
+      is_lvalue_reference<T>::value || is_rvalue_reference<T>::value>
+{};
+
+template <typename T, bool b>
+struct add_rvalue_reference_helper {
+  using type = T;
+};
+
+template <typename T>
+struct add_rvalue_reference_helper<T, true> {
+  using type = T&&;
+};
+
+template <typename T>
+struct add_rvalue_reference_imp {
+  using type = typename add_rvalue_reference_helper<
+      T,
+      (is_void<T>::value == false && is_reference<T>::value == false)>::type;
+};
+
+template <class T>
+struct add_rvalue_reference {
+  typedef typename add_rvalue_reference_imp<T>::type type;
+};
+
+template <typename T>
+typename add_rvalue_reference<T>::type
+declval() noexcept; // as unevaluated operand
+
 }

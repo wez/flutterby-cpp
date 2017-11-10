@@ -19,25 +19,25 @@ ProgMem(Food, Foo(123,321));
 
 int main() {
   // We should have nothing to copy to SRAM
-  EXPECT(data_segment_size() == 0);
+  EXPECT_EQ(data_segment_size(), 0);
 
   // Assert that deref has the correct type
   Foo local = *Food;
 
   // Dereference yields a copy of the object with the correct values
-  EXPECT(local.baz == 321);
-  EXPECT(local.bar == 123);
+  EXPECT_EQ(local.baz, 321);
+  EXPECT_EQ(local.bar, 123);
 
   // Taking the address yields something that derefs to the right contents
   auto ptr = &Food;
   local = *ptr;
-  EXPECT(local.baz == 321);
-  EXPECT(local.bar == 123);
+  EXPECT_EQ(local.baz, 321);
+  EXPECT_EQ(local.bar, 123);
 
   // pointer to member referencing
   auto localRef = Food.ref(&Foo::baz);
-  EXPECT(*localRef == 321);
-  EXPECT((Food->*(&Foo::baz)) == 123);
+  EXPECT_EQ(*localRef, 321);
+  EXPECT_EQ((Food->*(&Foo::baz)), 321);
 
   return 0;
 }

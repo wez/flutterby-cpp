@@ -7,7 +7,7 @@ namespace flutterby {
  * helper functor class Stream.  The Stream object is expected
  * to be callable with a byte at a time.
  */
-template <typename Stream>
+template <typename Stream, bool AddNewLine>
 class FormatStream {
   Stream stream_;
 
@@ -16,6 +16,12 @@ class FormatStream {
   FormatStream() = default;
   // move in a stream
   FormatStream(Stream&& stream) : stream_(move(stream)) {}
+
+  ~FormatStream() {
+    if constexpr (AddNewLine) {
+      write("\r"_P);
+    }
+  }
 
   // write out the content from an iterator range
   template <typename Iterator>
@@ -74,6 +80,10 @@ class FormatStream {
     }
     write_int(typename numeric_traits<Int>::unsigned_type(ival), base);
   }
+
+  FormatStream& stream() {
+    return *this;
+  }
 };
 
 /** A stream implementation that writes to the simavr console */
@@ -84,17 +94,20 @@ class SimavrConsoleStream {
   }
 };
 
-template <typename T, typename A, size_t Size>
-FormatStream<T>& operator<<(
-    FormatStream<T>& stm,
+#define DBG_NO_NL() FormatStream<SimavrConsoleStream, false>().stream()
+#define DBG() FormatStream<SimavrConsoleStream, true>().stream()
+
+template <typename T, bool NL, typename A, size_t Size>
+FormatStream<T, NL>& operator<<(
+    FormatStream<T, NL>& stm,
     const ProgMemArrayInst<A, Size>& arr) {
   stm.write(arr);
   return stm;
 }
 
-template <typename T>
-FormatStream<T>& operator<<(
-    FormatStream<T>& stm,
+template <typename T, bool NL>
+FormatStream<T, NL>& operator<<(
+    FormatStream<T, NL>& stm,
     const ProgMemRange<char>& arr) {
   stm.write(arr);
   return stm;
@@ -102,26 +115,26 @@ FormatStream<T>& operator<<(
 
 /** Support streaming regular string literals but emit a deprecation
  * notice to remind folks to use the _P literal */
-template <typename T, typename A, size_t Size>
-[[deprecated("use the _P string literal suffix to save SRAM!")]] FormatStream<
-    T>&
-operator<<(FormatStream<T>& stm, const A (&arr)[Size]) {
+template <typename T, bool NL, typename A, size_t Size>
+[[deprecated(
+    "use the _P string literal suffix to save SRAM!")]] FormatStream<T, NL>&
+operator<<(FormatStream<T, NL>& stm, const A (&arr)[Size]) {
   stm.write(&arr[0], &arr[Size]);
   return stm;
 }
 
 /** Stream an integral value as a decimal */
-template <typename T, typename Int>
-typename enable_if<numeric_traits<Int>::is_integral, FormatStream<T>>::type&
-operator<<(FormatStream<T>& stm, Int ival) {
+template <typename T, bool NL,typename Int>
+typename enable_if<numeric_traits<Int>::is_integral, FormatStream<T, NL>>::type&
+operator<<(FormatStream<T, NL>& stm, Int ival) {
   stm.write_int(ival, 10);
   return stm;
 }
 
 /** Show the pointer value for non-stringy looking pointers */
-template <typename T, typename Target>
-typename enable_if<!is_same<Target, char>::value, FormatStream<T>>::type&
-operator<<(FormatStream<T>& stm, const Target* ptr) {
+template <typename T, bool NL, typename Target>
+typename enable_if<!is_same<Target, char>::value, FormatStream<T, NL>>::type&
+operator<<(FormatStream<T, NL>& stm, const Target* ptr) {
   stm.write("0x"_P);
   stm.write_int(reinterpret_cast<size_t>(ptr), 16);
   return stm;

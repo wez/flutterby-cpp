@@ -11,9 +11,8 @@ template <typename U>
 inline typename enable_if<sizeof(U) == 1, U>::type progmem_deref(const U* ptr) {
   U result;
   __asm__ __volatile__("lpm %[retval], Z;\n\t"
-                       : [retval] "=r"(result)
-                       : "z"(ptr)
-                       :);
+                       : [retval] "=r"(result), "=z"(ptr)
+                       : "1"(ptr));
   return result;
 }
 
@@ -29,8 +28,8 @@ inline typename enable_if<sizeof(U) == 2, U>::type progmem_deref(const U* ptr) {
   __asm__ __volatile__(
       "lpm %A[retval], Z+;\n\t"
       "lpm %B[retval], Z;\n\t"
-      : [retval] "=al"(result)
-      : "z"(ptr)
+      : [retval] "=al"(result), "=z"(ptr)
+      : "1"(ptr)
       :);
   return result;
 }
@@ -42,8 +41,8 @@ inline typename enable_if<sizeof(U) == 3, U>::type progmem_deref(const U* ptr) {
       "lpm %A[retval], Z+;\n\t"
       "lpm %B[retval], Z+;\n\t"
       "lpm %C[retval], Z;\n\t"
-      : [retval] "=al"(result)
-      : "z"(ptr)
+      : [retval] "=al"(result), "=z"(ptr)
+      : "1"(ptr)
       :);
   return result;
 }
@@ -56,8 +55,8 @@ inline typename enable_if<sizeof(U) == 4, U>::type progmem_deref(const U* ptr) {
       "lpm %B[retval], Z+;\n\t"
       "lpm %C[retval], Z+;\n\t"
       "lpm %D[retval], Z;\n\t"
-      : [retval] "=al"(result)
-      : "z"(ptr)
+      : [retval] "=al"(result), "=z"(ptr)
+      : "1"(ptr)
       :);
   return result;
 }

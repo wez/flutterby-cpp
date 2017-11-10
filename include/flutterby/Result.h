@@ -2,6 +2,12 @@
 #include "flutterby/Traits.h"
 #include "flutterby/Progmem.h"
 
+// Operator for placement new
+template <typename T>
+constexpr void* operator new(size_t size, T* ptr) {
+  return ptr;
+}
+
 /** The Result type borrows from its namesake in Rust.
  * It forces the programmer to consider the possibility of error.
  */
@@ -9,7 +15,11 @@
 namespace flutterby {
 
 // A stand-in for the void type, but easier to match in templates
-struct Unit {};
+struct Unit {
+  // Lift void -> Unit if T is void, else T
+  template <typename T>
+  struct Lift : conditional<is_same<T, void>::value, Unit, T> {};
+};
 
 // A type that indicates that no failures are possible
 struct Infallible {};
@@ -93,10 +103,10 @@ class[[nodiscard]] Result {
       case State::kEmpty:
         break;
       case State::kOk:
-        value_ = move(other.value_);
+        new (&value_) Value(move(other.value_));
         break;
       case State::kError:
-        error_ = move(other.error_);
+        new (&error_) ErrorType(move(other.error_));
         break;
     }
     other.~Result();
@@ -113,10 +123,10 @@ class[[nodiscard]] Result {
         case State::kEmpty:
           break;
         case State::kOk:
-          value_ = move(other.value_);
+          new (&value_) Value(move(other.value_));
           break;
         case State::kError:
-          error_ = move(other.error_);
+          new (&error_) ErrorType(move(other.error_));
           break;
       }
 
@@ -133,10 +143,10 @@ class[[nodiscard]] Result {
       case State::kEmpty:
         break;
       case State::kOk:
-        value_ = other.value_;
+        new (&value_) Value(other.value_);
         break;
       case State::kError:
-        error_ = other.error_;
+        new (&error_) ErrorType(other.error_);
         break;
     }
   }
@@ -150,10 +160,10 @@ class[[nodiscard]] Result {
         case State::kEmpty:
           break;
         case State::kOk:
-          value_ = other.value_;
+          new (&value_) Value(other.value_);
           break;
         case State::kError:
-          error_ = other.error_;
+          new (&error_) ErrorType(other.error_);
           break;
       }
     }
@@ -195,7 +205,7 @@ class[[nodiscard]] Result {
   // not assigned, a panic will be issued by panicIfError().
   Value&& value()&& {
     panicIfError();
-    return value_;
+    return move(value_);
   }
 
   // Get a const reference to the value.  If the value is
@@ -317,12 +327,12 @@ class[[nodiscard]] Result<Unit, Unit> {
     }
   }
 
-  Unit value() {
+  Unit value() const {
     panicIfError();
     return Unit{};
   }
 
-  void panicIfNotError() {
+  void panicIfNotError() const {
     switch (state_) {
       case State::kOk:
         panic("Result holds Value, not Error"_P);
@@ -333,7 +343,7 @@ class[[nodiscard]] Result<Unit, Unit> {
     }
   }
 
-  Unit error() {
+  Unit error() const {
     panicIfNotError();
     return Unit{};
   }

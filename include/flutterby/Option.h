@@ -1,6 +1,7 @@
 #pragma once
 #include "flutterby/Traits.h"
 #include "flutterby/Result.h"
+
 namespace flutterby {
 
 template <typename T>
@@ -19,29 +20,28 @@ class Option {
   }
 
   constexpr Option() : empty_{true} {}
-  constexpr explicit Option(const T& other) : empty_{false}, value_(other) {}
-  constexpr explicit Option(T&& other) : empty_{false}, value_(move(other)) {}
-  constexpr explicit Option(const Option& other)
-      : empty_{false}, value_(other.value_) {}
-  explicit Option(Option&& other) {
+  constexpr Option(const T& other) : empty_{false}, value_(other) {}
+  constexpr Option(T&& other) : empty_{false}, value_(move(other)) {}
+  constexpr Option(const Option& other) : empty_{false}, value_(other.value_) {}
+  Option(Option&& other) noexcept {
     if (other.empty_) {
       empty_ = true;
     } else {
       empty_ = false;
-      value_ = move(other.value_);
+      new (&value_) T(move(other.value_));
       other.~Option();
       other.empty_ = true;
     }
   }
 
-  Option&operator=(const Option& other) {
+  Option& operator=(const Option& other) {
     if (&other != this) {
       this->~Option();
       if (other.empty_) {
         empty_ = true;
       } else {
         empty_ = false;
-        value_ = other.value_;
+        new (&value_) T(other.value_);
       }
     }
     return *this;
@@ -54,7 +54,7 @@ class Option {
         empty_ = true;
       } else {
         empty_ = false;
-        value_ = move(other.value_);
+        new (&value_) T(move(other.value_));
       }
       other.~Option();
       other.empty_ = true;
@@ -83,16 +83,16 @@ class Option {
   }
   // Get a mutable reference to the value.  If the value is
   // not assigned, a panic will be issued by panicIfEmpty().
-  T& value()& {
+  T& value() & {
     panicIfEmpty();
     return value_;
   }
 
   // Get an rvalue reference to the value.  If the value is
   // not assigned, a panic will be issued by panicIfEmpty().
-  T&& value()&& {
+  T&& value() && {
     panicIfEmpty();
-    return value_;
+    return move(value_);
   }
 
   // Get a const reference to the value.  If the value is
@@ -102,10 +102,14 @@ class Option {
     return value_;
   }
 
-  void panicIfEmpty() {
+  void panicIfEmpty() const {
     if (empty_) {
       panic("Empty Option"_P);
     }
+  }
+
+  static constexpr Option None() {
+    return Option();
   }
 };
 
