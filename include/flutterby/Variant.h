@@ -16,6 +16,9 @@
  * struct Foo { int foo; };
  * struct Bar { bool flag; };
  * Variant<Foo, Bar> v(Foo{123});
+ *
+ * v.match([](Foo& foo) {},
+ *         [](Bar& bar) {});
  * ```
  *
  * This particular Variant implementation does not allow absence of values;
@@ -131,6 +134,71 @@ struct recursive_helper<> {
   static inline void move(const u8 idx, void* src, void* data) {}
   static inline void copy(const u8 idx, void* src, void* data) {}
 };
+
+template <typename... Funcs>
+struct visitor;
+
+template <typename Func>
+struct visitor<Func> : Func {
+  using Func::operator();
+
+  template <typename T>
+  visitor(T&& func) : Func(forward<T>(func)) {}
+};
+
+template <typename Func, typename... Funcs>
+struct visitor<Func, Funcs...> : Func, visitor<Funcs...> {
+  using Func::operator();
+  using visitor<Funcs...>::operator();
+
+  template <typename T, typename... Ts>
+  visitor(T&& func, Ts&&... funcs)
+      : Func(forward<T>(func)), visitor<Funcs...>(forward<Ts>(funcs)...) {}
+};
+
+template <typename... Funcs>
+visitor<typename decay<Funcs>::type...> make_visitor(Funcs&&... funcs) {
+  return visitor<typename decay<Funcs>::type...>(forward<Funcs>(funcs)...);
+}
+
+template <typename Func, typename V, typename R, typename... Types>
+struct dispatcher;
+
+template <
+    typename Func,
+    typename V,
+    typename R,
+    typename First,
+    typename... Types>
+struct dispatcher<Func, V, R, First, Types...> {
+  inline static R apply_const(V const& v, Func&& func) {
+    if (First* t = v.template get_ptr<First>()) {
+      return func(*t);
+    } else {
+      return dispatcher<Func, V, R, Types...>::apply_const(
+          v, forward<Func>(func));
+    }
+  }
+
+  inline static R apply(V& v, Func&& func) {
+    if (First* t = v.template get_ptr<First>()) {
+      return func(*t);
+    } else {
+      return dispatcher<Func, V, R, Types...>::apply(v, forward<Func>(func));
+    }
+  }
+};
+
+template <typename Func, typename V, typename R, typename Type>
+struct dispatcher<Func, V, R, Type> {
+  inline static R apply_const(V const& v, Func&& func) {
+    return func(*v.template get_ptr<Type>());
+  }
+
+  inline static R apply(V& v, Func&& func) {
+    return func(*v.template get_ptr<Type>());
+  }
+};
 }
 
 template <typename First, typename... Types>
@@ -226,6 +294,38 @@ class Variant {
     helper_type::destroy(storage_[0], (void*)&storage_[1]);
     storage_[0] = variant::type_to_index<T, First, Types...>::index;
     helper_type::move(storage_[0], (void*)&v, (void*)&storage_[1]);
+  }
+
+  template <
+      typename Func,
+      typename R = typename result_of_functor<Func, First&>::type>
+  auto inline static visit(Variant const& v, Func&& f) {
+    return variant::dispatcher<Func, Variant, R, First, Types...>::apply(
+        v, forward<Func>(f));
+  }
+
+  template <typename... Funcs>
+  auto inline match(Funcs&&... funcs) const {
+    using Func = decltype(variant::make_visitor(forward<Funcs>(funcs)...));
+    using R = result_of_functor<Func, First&>;
+    return visit<Func, R>(
+        *this, variant::make_visitor(forward<Funcs>(funcs)...));
+  }
+
+  template <
+      typename Func,
+      typename R = typename result_of_functor<Func, First&>::type>
+  auto inline static visit(Variant& v, Func&& f) {
+    return variant::dispatcher<Func, Variant, R, First, Types...>::apply(
+        v, forward<Func>(f));
+  }
+
+  template <typename... Funcs>
+  auto inline match(Funcs&&... funcs) {
+    using Func = decltype(variant::make_visitor(forward<Funcs>(funcs)...));
+    using R = result_of_functor<Func, First&>;
+    return visit<Func, R>(
+        *this, variant::make_visitor(forward<Funcs>(funcs)...));
   }
 };
 }
