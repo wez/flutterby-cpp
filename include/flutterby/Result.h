@@ -1,12 +1,8 @@
 #pragma once
 #include "flutterby/Traits.h"
+#include "flutterby/Types.h"
 #include "flutterby/Progmem.h"
-
-// Operator for placement new
-template <typename T>
-constexpr void* operator new(size_t size, T* ptr) {
-  return ptr;
-}
+#include "flutterby/New.h"
 
 /** The Result type borrows from its namesake in Rust.
  * It forces the programmer to consider the possibility of error.
@@ -14,18 +10,11 @@ constexpr void* operator new(size_t size, T* ptr) {
 
 namespace flutterby {
 
-// A stand-in for the void type, but easier to match in templates
-struct Unit {
-  // Lift void -> Unit if T is void, else T
-  template <typename T>
-  struct Lift : conditional<is_same<T, void>::value, Unit, T> {};
-};
-
 // A type that indicates that no failures are possible
 struct Infallible {};
 
 [[noreturn]] extern void
-panicImpl(FlashString file, uint16_t line, FlashString reason);
+panicImpl(FlashString file, u16 line, FlashString reason);
 
 #define panic(reason) panicImpl(__FILE__ ""_P, __LINE__, reason)
 
@@ -267,7 +256,7 @@ class[[nodiscard]] Result {
 
 template <>
 class[[nodiscard]] Result<Unit, Unit> {
-  enum class State : uint8_t { kEmpty, kOk, kError };
+  enum class State : u8 { kEmpty, kOk, kError };
   State state_;
 
   constexpr Result(State state) : state_(state) {}

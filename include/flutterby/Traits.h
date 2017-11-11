@@ -129,4 +129,17 @@ template <typename T>
 typename add_rvalue_reference<T>::type
 declval() noexcept; // as unevaluated operand
 
+template <class T>
+constexpr inline T&& forward(typename remove_reference<T>::type& t) noexcept {
+  return static_cast<T&&>(t);
+}
+
+template <class T>
+constexpr inline T&& forward(typename remove_reference<T>::type&& t) noexcept {
+  static_assert(
+      !is_lvalue_reference<T>::value,
+      "Can not forward an rvalue as an lvalue.");
+  return static_cast<T&&>(t);
+}
+
 }
