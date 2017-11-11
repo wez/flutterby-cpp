@@ -224,7 +224,7 @@ class Variant {
   constexpr Variant(const Variant& other) {
     storage_[0] = other.storage_[0];
     helper_type::copy(
-        storage_[0], (void*)other.storage_[1], (void*)&storage_[1]);
+        storage_[0], (void*)&other.storage_[1], (void*)&storage_[1]);
   }
 
   Variant& operator=(const Variant& other) {
@@ -232,7 +232,7 @@ class Variant {
       helper_type::destroy(storage_[0], (void*)&storage_[1]);
       storage_[0] = other.storage_[0];
       helper_type::copy(
-          storage_[0], (void*)other.storage_[1], (void*)&storage_[1]);
+          storage_[0], (void*)&other.storage_[1], (void*)&storage_[1]);
     }
     return *this;
   }
@@ -240,7 +240,7 @@ class Variant {
   constexpr Variant(Variant&& other) {
     storage_[0] = other.storage_[0];
     helper_type::move(
-        storage_[0], (void*)other.storage_[1], (void*)&storage_[1]);
+        storage_[0], (void*)&other.storage_[1], (void*)&storage_[1]);
   }
 
   Variant& operator=(Variant&& other) {
@@ -248,7 +248,7 @@ class Variant {
       helper_type::destroy(storage_[0], (void*)&storage_[1]);
       storage_[0] = other.storage_[0];
       helper_type::move(
-          storage_[0], (void*)other.storage_[1], (void*)&storage_[1]);
+          storage_[0], (void*)&other.storage_[1], (void*)&storage_[1]);
     }
     return *this;
   }

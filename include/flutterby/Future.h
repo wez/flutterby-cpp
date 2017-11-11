@@ -1,5 +1,6 @@
 #pragma once
 #include "flutterby/Option.h"
+#include "flutterby/Variant.h"
 
 /** Futures
  * The Future<> type indicates the Result of some work that may complete
@@ -75,6 +76,14 @@ struct isResult<Result<ValueType, ErrorType>> : true_type {
   using future_type = Future<ValueType, ErrorType, ResultFuture<ValueType, ErrorType>>;
 };
 
+template <typename Prior, typename Func>
+struct PriorAndFunc {
+  Prior prior;
+  Func func;
+};
+
+struct Done {};
+
 // A helper to encapsulate the "and_then" combinator logic.
 // The intent is: if the LHS is successful, invoke Func with the Ok data.
 // Otherwise the error result from the LHS is wrapped up in the Result type
@@ -86,41 +95,36 @@ template <
     typename Func,
     typename Apply>
 auto poll_and_then(
-    Option<PriorFuture>& prior,
-    Option<NextFuture>& next,
-    Func& func,
+    Variant<PriorAndFunc<PriorFuture, Func>, NextFuture, Done>& v,
     Apply&& apply) {
-  if (prior.is_some()) {
-    auto status = prior.value().poll();
+  return v.match(
+      [&v, &apply](PriorAndFunc<PriorFuture, Func>& state) {
+        auto status = state.prior.poll();
 
-    if (!status.is_some()) {
-      return Option<NextResult>::None();
-    }
+        if (status.is_some()) {
+          auto& prior_result = status.value();
+          if (prior_result.is_ok()) {
+            // map the Ok value
+            v = apply(state.func(move(prior_result.value())));
+          } else {
+            // Propagate the Error value
+            v = Done{};
+            return Some(NextResult::Error(move(prior_result.error())));
+          }
+        }
+        return Option<NextResult>::None();
+      },
+      [&v](NextFuture& next) {
+        auto status = next.poll();
 
-    auto& prior_result = status.value();
-    if (prior_result.is_ok()) {
-      // map the Ok value
-      next = Some(apply(func(move(prior_result.value()))));
-      prior.clear();
-    } else {
-      // Propagate the Error value
-      prior.clear();
-      next.clear();
-      return Some(NextResult::Error(move(prior_result.error())));
-    }
-  }
-  if (next.is_some()) {
-    auto status = next.value().poll();
+        if (!status.is_some()) {
+          return Option<NextResult>::None();
+        }
 
-    if (!status.is_some()) {
-      return Option<NextResult>::None();
-    }
-
-    next.clear();
-    return status;
-  }
-
-  return Option<NextResult>::None();
+        v = Done{};
+        return status;
+      },
+      [&v](Done) { return Option<NextResult>::None(); });
 }
 
 // A helper to encapsulate the "or_else" combinator logic.
@@ -134,42 +138,38 @@ template <
     typename Func,
     typename Apply>
 auto poll_or_else(
-    Option<PriorFuture>& prior,
-    Option<NextFuture>& next,
-    Func& func,
+    Variant<PriorAndFunc<PriorFuture, Func>, NextFuture, Done>& v,
     Apply&& apply) {
-  if (prior.is_some()) {
-    auto status = prior.value().poll();
+  return v.match(
+      [&v, &apply](PriorAndFunc<PriorFuture, Func>& state) {
 
-    if (!status.is_some()) {
-      return Option<NextResult>::None();
-    }
+        auto status = state.prior.poll();
 
-    auto& prior_result = status.value();
+        if (status.is_some()) {
+          auto& prior_result = status.value();
 
-    if (prior_result.is_err()) {
-      // map the Error value
-      next = Some(apply(func(move(prior_result.error()))));
-      prior.clear();
-    } else {
-      // Propagate the Ok value
-      prior.clear();
-      next.clear();
-      return Some(NextResult::Ok(move(prior_result.value())));
-    }
-  }
-  if (next.is_some()) {
-    auto status = next.value().poll();
+          if (prior_result.is_err()) {
+            // map the Error value
+            v = apply(state.func(move(prior_result.error())));
+          } else {
+            // Propagate the Ok value
+            v = Done{};
+            return Some(NextResult::Ok(move(prior_result.value())));
+          }
+        }
+        return Option<NextResult>::None();
+      },
+      [&v](NextFuture& next) {
+        auto status = next.poll();
 
-    if (!status.is_some()) {
-      return Option<NextResult>::None();
-    }
+        if (!status.is_some()) {
+          return Option<NextResult>::None();
+        }
 
-    next.clear();
-    return status;
-  }
-
-  return Option<NextResult>::None();
+        v = Done{};
+        return status;
+      },
+      [&v](Done) { return Option<NextResult>::None(); });
 }
 
 } // namespace detail
@@ -204,7 +204,7 @@ class[[nodiscard]] Future {
       typename Func,
       typename enable_if<
           !future::isResult<future::resultOf<Func, ValueType&&>>::value &&
-          !future::isFuture<future::resultOf<Func, ValueType&&>>::value,
+              !future::isFuture<future::resultOf<Func, ValueType&&>>::value,
           int>::type = 0>
   auto and_then(Func && func)&& {
     using NextValue = typename future::resultOf<Func, ValueType&&>;
@@ -215,19 +215,21 @@ class[[nodiscard]] Future {
         future::ResultFuture<NextValue, ErrorType>>;
     using NextResult = Result<NextValue, ErrorType>;
     struct ThenValue {
-      Option<PriorFuture> prior_;
-      Option<NextFuture> next_;
-      Func func_;
+      Variant<future::PriorAndFunc<PriorFuture, Func>, NextFuture, future::Done>
+          state;
 
       Option<NextResult> operator()() {
-        return future::poll_and_then<NextResult>(
-            prior_, next_, func_, [](ValueType&& result) {
-              return NextFuture(NextResult(move(result)));
-            });
+        return future::poll_and_then<NextResult>(state, [](ValueType&& result) {
+          return NextFuture(NextResult(move(result)));
+        });
       }
+
+      ThenValue(PriorFuture&& prior, Func&& func)
+          : state(future::PriorAndFunc<PriorFuture, Func>{move(prior),
+                                                          move(func)}) {}
     };
     return Future<ValueType, ErrorType, ThenValue>(
-        ThenValue{move(*this), Option<NextFuture>::None(), move(func)});
+        ThenValue{move(*this), move(func)});
   }
 
   /** Future.and_then([](ValueType) -> Result<NextValue, ErrorType>) */
@@ -243,22 +245,22 @@ class[[nodiscard]] Future {
     using NextFuture = typename ResultTrait::future_type;
     using NextResult = typename ResultTrait::result_type;
     struct ThenResult {
-      Option<PriorFuture> prior_;
-      Option<NextFuture> next_;
-      Func func_;
+      Variant<future::PriorAndFunc<PriorFuture, Func>, NextFuture, future::Done>
+          state;
 
       Option<NextResult> operator()() {
         return future::poll_and_then<NextResult>(
-            prior_,
-            next_,
-            func_,
-            [](typename ResultTrait::result_type&& result) {
+            state, [](typename ResultTrait::result_type&& result) {
               return NextFuture(move(result));
             });
       }
+
+      ThenResult(PriorFuture&& prior, Func&& func)
+          : state(future::PriorAndFunc<PriorFuture, Func>{move(prior),
+                                                          move(func)}) {}
     };
     return Future<ValueType, ErrorType, ThenResult>(
-        ThenResult{move(*this), Option<NextFuture>::None(), move(func)});
+        ThenResult{move(*this), move(func)});
   }
 
   /** Future.and_then([](ValueType) -> Future<NextValue, ErrorType>) */
@@ -273,26 +275,27 @@ class[[nodiscard]] Future {
     using NextFuture = typename Trait::future_type;
     using NextResult = typename Trait::result_type;
     struct ThenFuture {
-      Option<PriorFuture> prior_;
-      Option<NextFuture> next_;
-      Func func_;
+      Variant<future::PriorAndFunc<PriorFuture, Func>, NextFuture, future::Done>
+          state;
 
-      typename NextFuture::poll_type operator()() {
+      Option<NextResult> operator()() {
         return future::poll_and_then<NextResult>(
-            prior_, next_, func_, [](NextFuture&& result) { return result; });
+            state, [](NextFuture&& result) { return result; });
       }
+      ThenFuture(PriorFuture&& prior, Func&& func)
+          : state(future::PriorAndFunc<PriorFuture, Func>{move(prior),
+                                                          move(func)}) {}
     };
     return Future<ValueType, ErrorType, ThenFuture>(
-        ThenFuture{move(*this), Option<NextFuture>::None(), move(func)});
+        ThenFuture{move(*this), move(func)});
   }
-
 
   /** Future.or_else([](ErrorType) -> NextErrorType */
   template <
       typename Func,
       typename enable_if<
           !future::isResult<future::resultOf<Func, ErrorType&&>>::value &&
-          !future::isFuture<future::resultOf<Func, ErrorType&&>>::value,
+              !future::isFuture<future::resultOf<Func, ErrorType&&>>::value,
           int>::type = 0>
   auto or_else(Func && func)&& {
     using NextError = typename future::resultOf<Func, ErrorType&&>;
@@ -303,19 +306,21 @@ class[[nodiscard]] Future {
         future::ResultFuture<ValueType, NextError>>;
     using NextResult = Result<ValueType, NextError>;
     struct ElseValue {
-      Option<PriorFuture> prior_;
-      Option<NextFuture> next_;
-      Func func_;
+      Variant<future::PriorAndFunc<PriorFuture, Func>, NextFuture, future::Done>
+          state;
 
       Option<NextResult> operator()() {
-        return future::poll_or_else<NextResult>(
-            prior_, next_, func_, [](NextError&& result) {
-              return NextFuture(NextResult::Error(move(result)));
-            });
+        return future::poll_or_else<NextResult>(state, [](NextError&& result) {
+          return NextFuture(NextResult::Error(move(result)));
+        });
       }
+
+      ElseValue(PriorFuture&& prior, Func&& func)
+          : state(future::PriorAndFunc<PriorFuture, Func>{move(prior),
+                                                          move(func)}) {}
     };
     return Future<ValueType, NextError, ElseValue>(
-        ElseValue{move(*this), Option<NextFuture>::None(), move(func)});
+        ElseValue{move(*this), move(func)});
   }
 
   /** Future.or_else([](ErrorType) -> Result<NextValue, ErrorType>) */
@@ -331,22 +336,21 @@ class[[nodiscard]] Future {
     using NextFuture = typename ResultTrait::future_type;
     using NextResult = typename ResultTrait::result_type;
     struct ElseResult {
-      Option<PriorFuture> prior_;
-      Option<NextFuture> next_;
-      Func func_;
+      Variant<future::PriorAndFunc<PriorFuture, Func>, NextFuture, future::Done>
+          state;
 
       Option<NextResult> operator()() {
         return future::poll_or_else<NextResult>(
-            prior_,
-            next_,
-            func_,
-            [](typename ResultTrait::result_type&& result) {
+            state, [](typename ResultTrait::result_type&& result) {
               return NextFuture(move(result));
             });
       }
+      ElseResult(PriorFuture&& prior, Func&& func)
+          : state(future::PriorAndFunc<PriorFuture, Func>{move(prior),
+                                                          move(func)}) {}
     };
     return Future<ValueType, ErrorType, ElseResult>(
-        ElseResult{move(*this), Option<NextFuture>::None(), move(func)});
+        ElseResult{move(*this), move(func)});
   }
 
   /** Future.or_else([](ErrorType) -> Future<NextValue, ErrorType>) */
@@ -361,17 +365,19 @@ class[[nodiscard]] Future {
     using NextFuture = typename Trait::future_type;
     using NextResult = typename Trait::result_type;
     struct ElseFuture {
-      Option<PriorFuture> prior_;
-      Option<NextFuture> next_;
-      Func func_;
+      Variant<future::PriorAndFunc<PriorFuture, Func>, NextFuture, future::Done>
+          state;
 
       typename NextFuture::poll_type operator()() {
         return future::poll_or_else<NextResult>(
-            prior_, next_, func_, [](NextFuture&& result) { return result; });
+            state, [](NextFuture&& result) { return result; });
       }
+      ElseFuture(PriorFuture&& prior, Func&& func)
+          : state(future::PriorAndFunc<PriorFuture, Func>{move(prior),
+                                                          move(func)}) {}
     };
     return Future<ValueType, ErrorType, ElseFuture>(
-        ElseFuture{move(*this), Option<NextFuture>::None(), move(func)});
+        ElseFuture{move(*this), move(func)});
   }
 };
 
