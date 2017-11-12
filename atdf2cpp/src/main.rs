@@ -20,7 +20,7 @@ fn or_name<'a>(caption: &'a String, name: &'a String) -> &'a String {
 }
 
 /// "ADC Noise Reduction (If Available)" -> "ADC_Noise_Reduction_If_Available"
-fn caption_to_ident(caption: &String, group_name: &String) -> String {
+fn caption_to_ident(caption: &String, group_name: Option<&String>) -> String {
     let ident: String = caption
         .chars()
         .filter_map(|c| if c.is_ascii_whitespace() {
@@ -32,7 +32,18 @@ fn caption_to_ident(caption: &String, group_name: &String) -> String {
         })
         .collect();
 
-    format!("{}_{}", group_name, ident)
+    let ident = if let Some(group_name) = group_name {
+        format!("{}_{}", group_name, ident)
+    } else {
+        ident
+    };
+
+
+    if ident.as_bytes()[0].is_ascii_digit() {
+        format!("_{}", ident)
+    } else {
+        ident
+    }
 }
 
 fn main() {
@@ -57,6 +68,7 @@ fn placement(addr: u32) -> Option<&'static str> {
 fn genmcu(mcu: &avr_mcu::Mcu, name: &str) -> std::io::Result<()> {
     let mut mcu_def = File::create(format!("target/{}/avr_autogen.h", name))?;
 
+    writeln!(mcu_def, "#pragma once")?;
     writeln!(mcu_def, "#include <stdint.h>")?;
     writeln!(mcu_def, "#include <flutterby/Bitflags.h>")?;
     writeln!(mcu_def, "namespace flutterby {{")?;
@@ -142,7 +154,7 @@ fn genmcu(mcu: &avr_mcu::Mcu, name: &str) -> std::io::Result<()> {
                         ));
 
                         for value in vg.values.iter() {
-                            let name = caption_to_ident(&value.caption, &vg.name);
+                            let name = caption_to_ident(&value.caption, Some(&field.name));
                             if done_value_name.contains(&name) {
                                 continue;
                             }

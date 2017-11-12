@@ -1,4 +1,7 @@
 #pragma once
+#include "flutterby/Debug.h"
+#include "flutterby/Progmem.h"
+
 extern "C" void exit(int) __attribute__((noreturn));
 namespace flutterby {
 

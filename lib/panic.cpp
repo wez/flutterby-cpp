@@ -2,9 +2,15 @@
 #include "flutterby/Result.h"
 #include "flutterby/Debug.h"
 
+using namespace flutterby;
+
 extern "C"
 [[noreturn]]
 void exit(int result);
+
+extern "C"[[noreturn]] void __cxa_pure_virtual(void) {
+  panic("__cxa_pure_virtual"_P);
+}
 
 namespace flutterby {
 

@@ -1,3 +1,4 @@
+#include "flutterby/Heap.h"
 #include "flutterby/Future.h"
 namespace flutterby {
 namespace future {
@@ -11,24 +12,28 @@ void Pollable::spawn(Pollable *p) {
   POLLABLES = p;
 }
 
+bool Pollable::have_pollables() {
+  return POLLABLES != nullptr;
+}
+
 bool Pollable::poll_all() {
   bool did_any = false;
 
-  Pollable** prev_ptr = &POLLABLES;
-  auto p = POLLABLES;
+  Pollable** prev_next = &POLLABLES;
+  auto p = *prev_next;
   while (p) {
     if (p->poll()) {
       did_any = true;
 
       auto to_free = p;
-      (*prev_ptr)->next_ = to_free->next_;
+      *prev_next = to_free->next_;
       p = to_free->next_;
 
-      delete p;
+      delete to_free;
       continue;
     }
 
-    prev_ptr = &p->next_;
+    prev_next = &p->next_;
     p = p->next_;
   }
 

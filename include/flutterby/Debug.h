@@ -1,6 +1,7 @@
+#pragma once
+#include "avr_autogen.h"
 #include "flutterby/Progmem.h"
 
-#pragma once
 namespace flutterby {
 
 /** FormatStream provides a way to emit formatted output to a
@@ -56,14 +57,15 @@ class FormatStream {
     }
 
     char buf[numeric_traits<Int>::max_decimal_digits];
-    uint8_t i = numeric_traits<Int>::max_decimal_digits - 1;
+    // Careful not to underflow i when we have max_decimal_digits to print
+    uint8_t i = numeric_traits<Int>::max_decimal_digits;
 
     while (val != 0) {
       uint8_t rem = val % base;
-      buf[i--] = (rem > 9) ? (rem - 10 + 'a') : (rem + '0');
+      buf[--i] = (rem > 9) ? (rem - 10 + 'a') : (rem + '0');
       val /= base;
     }
-    write(buf + i + 1, buf + numeric_traits<Int>::max_decimal_digits);
+    write(buf + i , buf + numeric_traits<Int>::max_decimal_digits);
   }
 
   // Format a signed integer with the specified base and write it out

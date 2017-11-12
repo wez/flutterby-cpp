@@ -2,7 +2,9 @@
 #include "flutterby/Progmem.h"
 #include <string.h>
 #include "flutterby/Debug.h"
-#include "flutterby/Test.h"
+#include "flutterby/Timer1.h"
+#include "flutterby/EventLoop.h"
+#include "flutterby/Heap.h"
 
 using namespace flutterby;
 

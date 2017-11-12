@@ -381,12 +381,12 @@ constexpr Result<ValueType, ErrorType> Error() {
 
 template <typename ValueType, typename ErrorType = Unit>
 constexpr Result<ValueType, ErrorType> Ok(ValueType&& value) {
-  return Result<ValueType, ErrorType>::Ok(value);
+  return Result<ValueType, ErrorType>::Ok(move(value));
 }
 
 template <typename ValueType=Unit, typename ErrorType>
 constexpr Result<ValueType, ErrorType> Error(ErrorType&& value) {
-  return Result<ValueType, ErrorType>::Error(value);
+  return Result<ValueType, ErrorType>::Error(move(value));
 }
 
 /** Try is similar to the try! macro in rust.

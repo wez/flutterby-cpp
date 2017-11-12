@@ -395,6 +395,7 @@ class Pollable {
 
   static void spawn(Pollable* p);
   static bool poll_all();
+  static bool have_pollables();
 };
 }
 

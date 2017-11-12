@@ -56,6 +56,9 @@ struct conditional<false, IfTrue, IfFalse> {
   using type = IfFalse;
 };
 
+template <bool B, class T, class F>
+using conditional_t = typename conditional<B, T, F>::type;
+
 template <bool B, class T = void>
 struct enable_if {};
 
@@ -276,4 +279,48 @@ struct decay {
 template <typename F, typename... Args>
 using result_of_functor = decltype(declval<F>()(declval<Args>()...));
 
+template<typename... Ts> struct make_void { typedef void type;};
+template<typename... Ts> using void_t = typename make_void<Ts...>::type;
+
+namespace details {
+template <typename Base>
+true_type is_base_of_test_func(const volatile Base*);
+template <typename Base>
+false_type is_base_of_test_func(const volatile void*);
+template <typename Base, typename Derived>
+using pre_is_base_of =
+    decltype(is_base_of_test_func<Base>(declval<Derived*>()));
+
+template <typename Base, typename Derived, typename = void>
+struct pre_is_base_of2 : public true_type {};
+
+template <typename Base, typename Derived>
+struct pre_is_base_of2<Base, Derived, void_t<pre_is_base_of<Base, Derived>>>
+    : public pre_is_base_of<Base, Derived> {};
+template <class T>
+char test(int T::*);
+
+struct two {
+  char c[2];
+};
+
+template <class T>
+two test(...);
+}
+
+// Need compiler support for this
+template <class T>
+struct is_union : false_type {};
+
+template <class T>
+struct is_class : integral_constant<
+                      bool,
+                      sizeof(details::test<T>(0)) == 1 && !is_union<T>::value> {
+};
+
+template <typename Base, typename Derived>
+struct is_base_of : public conditional_t<
+                        is_class<Base>::value && is_class<Derived>::value,
+                        details::pre_is_base_of2<Base, Derived>,
+                        false_type> {};
 }

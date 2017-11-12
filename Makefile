@@ -4,15 +4,18 @@
 MCU=atmega328p
 F_CPU=16000000
 
-AVR_CXXFLAGS=-std=c++17 -fno-exceptions -g -mmcu=$(MCU) -Wa,-adln=$@.s -fverbose-asm -Os -DHAVE_SIMAVR=1 -DF_CPU=$(F_CPU) -Wl,--section-start=.mmcu=0x910000 -Itarget/$(MCU) -Iinclude -I/usr/local/include
+AVR_CXXFLAGS=-std=c++17 -fno-exceptions -g -mmcu=$(MCU) -MMD -MF $@.d -MP -Wa,-adln=$@.s -fverbose-asm -Os -DHAVE_SIMAVR=1 -DF_CPU=$(F_CPU) -Wl,--section-start=.mmcu=0x910000 -Itarget/$(MCU) -Iinclude -I/usr/local/include
 
 all: target/$(MCU)/blink.elf
 
+include $(shell find target/$(MCU) -name \*.d)
+
 target/debug/atdf2cpp: atdf2cpp/src/main.rs
 	@mkdir -p $(@D) target/$(MCU)
-	cargo run -p atdf2cpp $(MCU)
+	cargo build -p atdf2cpp
 
 target/$(MCU)/avr_autogen.h: target/debug/atdf2cpp
+	cargo run -p atdf2cpp $(MCU)
 
 target/simrunner: simrunner/main.cpp
 	@mkdir -p $(@D)
