@@ -1,4 +1,5 @@
 #pragma once
+#include "flutterby/Types.h"
 #include "flutterby/Option.h"
 #include "flutterby/Variant.h"
 

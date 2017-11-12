@@ -1,4 +1,6 @@
 #pragma once
+#include "flutterby/Traits.h"
+
 namespace flutterby {
 
 using u8 = uint8_t;

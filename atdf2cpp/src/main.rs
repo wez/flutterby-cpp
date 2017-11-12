@@ -3,6 +3,7 @@
 extern crate avr_mcu;
 extern crate ident_case;
 
+use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::ascii::AsciiExt;
@@ -35,8 +36,9 @@ fn caption_to_ident(caption: &String, group_name: &String) -> String {
 }
 
 fn main() {
-    let mcu = avr_mcu::microcontroller("atmega32u4");
-    genmcu(&mcu).expect("failed to generate mcu data");
+    let name = env::args().nth(1).expect("name of mcu as first argument");
+    let mcu = avr_mcu::microcontroller(&name);
+    genmcu(&mcu, &name).expect("failed to generate mcu data");
 }
 
 fn placement(addr: u32) -> Option<&'static str> {
@@ -52,8 +54,8 @@ fn placement(addr: u32) -> Option<&'static str> {
     }
 }
 
-fn genmcu(mcu: &avr_mcu::Mcu) -> std::io::Result<()> {
-    let mut mcu_def = File::create("target/atmega32u4.h")?;
+fn genmcu(mcu: &avr_mcu::Mcu, name: &str) -> std::io::Result<()> {
+    let mut mcu_def = File::create(format!("target/{}/avr_autogen.h", name))?;
 
     writeln!(mcu_def, "#include <stdint.h>")?;
     writeln!(mcu_def, "#include <flutterby/Bitflags.h>")?;

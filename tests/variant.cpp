@@ -1,4 +1,4 @@
-#include "atmega32u4.h"
+#include "avr_autogen.h"
 #include <string.h>
 #include "flutterby/Debug.h"
 #include "flutterby/Option.h"
