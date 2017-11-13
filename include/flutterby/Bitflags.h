@@ -47,6 +47,13 @@ public:
     return bitflags(bits);
   }
 
+  void set_raw_bits(Int bits) {
+    value_ = bits;
+  }
+  void set_raw_bits(Int bits) volatile {
+    value_ = bits;
+  }
+
   void clear() {
     value_ = 0;
   }
@@ -61,6 +68,19 @@ public:
 
   constexpr Int raw_bits() const volatile {
     return value_;
+  }
+
+  constexpr bool operator==(const Bitflags&other) {
+    return value_ == other.value_;
+  }
+  constexpr bool operator==(const Bitflags&other) volatile {
+    return value_ == other.value_;
+  }
+  constexpr bool operator!=(const Bitflags&other) {
+    return value_ != other.value_;
+  }
+  constexpr bool operator!=(const Bitflags&other) volatile {
+    return value_ != other.value_;
   }
 
   constexpr Bitflags &operator=(const Bitflags &other) {

@@ -48,8 +48,11 @@ fn caption_to_ident(caption: &String, group_name: Option<&String>) -> String {
 
 fn main() {
     let name = env::args().nth(1).expect("name of mcu as first argument");
+    let output_file_name = env::args()
+        .nth(2)
+        .expect("name of dest file as second argument");
     let mcu = avr_mcu::microcontroller(&name);
-    genmcu(&mcu, &name).expect("failed to generate mcu data");
+    genmcu(&mcu, &name, &output_file_name).expect("failed to generate mcu data");
 }
 
 fn placement(addr: u32) -> Option<&'static str> {
@@ -65,8 +68,8 @@ fn placement(addr: u32) -> Option<&'static str> {
     }
 }
 
-fn genmcu(mcu: &avr_mcu::Mcu, name: &str) -> std::io::Result<()> {
-    let mut mcu_def = File::create(format!("target/{}/avr_autogen.h", name))?;
+fn genmcu(mcu: &avr_mcu::Mcu, _name: &str, output_file_name: &str) -> std::io::Result<()> {
+    let mut mcu_def = File::create(output_file_name)?;
 
     writeln!(mcu_def, "#pragma once")?;
     writeln!(mcu_def, "#include <stdint.h>")?;

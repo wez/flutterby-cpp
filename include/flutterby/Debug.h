@@ -25,38 +25,30 @@ class FormatStream {
   FormatStream(Stream&& stream) : stream_(move(stream)) {}
 
   ~FormatStream() {
-#if HAVE_DBG
     if constexpr (AddNewLine) {
-      write("\r"_P);
+      write("\r\n"_P);
     }
-#endif
   }
 
   // write out the content from an iterator range
   template <typename Iterator>
   void write(Iterator a, Iterator b) {
-#if HAVE_DBG
     while (a != b) {
       stream_(*a);
       ++a;
     }
-#endif
   }
 
   // Iterate the array and write out each byte
   template <typename C, size_t Size>
   void write(const ProgMemArrayInst<C, Size>& arr) {
-#if HAVE_DBG
     write(arr.begin(), arr.end());
-#endif
   }
 
   // Iterate the range and write out each byte
   template <typename C>
   void write(const ProgMemRange<C>& arr) {
-#if HAVE_DBG
     write(arr.begin(), arr.end());
-#endif
   }
 
   // Format an unsigned integer with the specified base and write it out
@@ -65,7 +57,6 @@ class FormatStream {
       numeric_traits<Int>::is_integral && !numeric_traits<Int>::is_signed,
       void>::type
   write_int(Int val, uint8_t base) {
-#if HAVE_DBG
     if (val == 0) {
       stream_('0');
       return;
@@ -81,7 +72,6 @@ class FormatStream {
       val /= base;
     }
     write(buf + i , buf + numeric_traits<Int>::max_decimal_digits);
-#endif
   }
 
   // Format a signed integer with the specified base and write it out
@@ -90,7 +80,6 @@ class FormatStream {
       numeric_traits<Int>::is_integral && numeric_traits<Int>::is_signed,
       void>::type
   write_int(Int ival, uint8_t base) {
-#if HAVE_DBG
     if (ival < 0 && base == 10) {
       // Only handle negative numbers for base 10;
       // we assume unsigned otherwise.
@@ -98,7 +87,6 @@ class FormatStream {
       ival = -ival;
     }
     write_int(typename numeric_traits<Int>::unsigned_type(ival), base);
-#endif
   }
 
   FormatStream& stream() {
@@ -124,9 +112,7 @@ template <typename T, bool NL, typename A, size_t Size>
 FormatStream<T, NL>& operator<<(
     FormatStream<T, NL>& stm,
     const ProgMemArrayInst<A, Size>& arr) {
-#if HAVE_DBG
   stm.write(arr);
-#endif
   return stm;
 }
 
@@ -134,9 +120,7 @@ template <typename T, bool NL>
 FormatStream<T, NL>& operator<<(
     FormatStream<T, NL>& stm,
     const ProgMemRange<char>& arr) {
-#if HAVE_DBG
   stm.write(arr);
-#endif
   return stm;
 }
 
@@ -146,9 +130,7 @@ template <typename T, bool NL, typename A, size_t Size>
 [[deprecated(
     "use the _P string literal suffix to save SRAM!")]] FormatStream<T, NL>&
 operator<<(FormatStream<T, NL>& stm, const A (&arr)[Size]) {
-#if HAVE_DBG
   stm.write(&arr[0], &arr[Size]);
-#endif
   return stm;
 }
 
@@ -156,9 +138,7 @@ operator<<(FormatStream<T, NL>& stm, const A (&arr)[Size]) {
 template <typename T, bool NL,typename Int>
 typename enable_if<numeric_traits<Int>::is_integral, FormatStream<T, NL>>::type&
 operator<<(FormatStream<T, NL>& stm, Int ival) {
-#if HAVE_DBG
   stm.write_int(ival, 10);
-#endif
   return stm;
 }
 
@@ -166,10 +146,8 @@ operator<<(FormatStream<T, NL>& stm, Int ival) {
 template <typename T, bool NL, typename Target>
 typename enable_if<!is_same<Target, char>::value, FormatStream<T, NL>>::type&
 operator<<(FormatStream<T, NL>& stm, const Target* ptr) {
-#if HAVE_DBG
   stm.write("0x"_P);
   stm.write_int(reinterpret_cast<size_t>(ptr), 16);
-#endif
   return stm;
 }
 

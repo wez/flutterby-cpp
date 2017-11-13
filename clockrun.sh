@@ -1,14 +1,16 @@
 #!/bin/bash
 example=$1
-PORT=/dev/cu.usbmodem1431
+PORT=/dev/cu.usbserial-A106TF8G
 set -e
 
-MCU=atmega32u4
+MCU=atmega328p
+F_CPU=16000000
 elf=target/$MCU/examples/$example.elf
+hex=target/$MCU/examples/$example.hex
 
-make $elf
+make MCU=$MCU F_CPU=$F_CPU $elf
 
-avr-objcopy $elf -O ihex target/$MCU/examples/$example.hex
+avr-objcopy $elf -O ihex $hex
 
 if [[ ! -e $PORT ]] ; then
   echo "$PORT is not present."
@@ -29,4 +31,4 @@ if [[ -e $PORT ]]; then
   esac
 fi
 
-avrdude -p atmega32u4 -U flash:w:target/$MCU/$example.hex:i -cavr109 -b57600 -D -P $PORT
+avrdude -p $MCU -U flash:w:$hex:i -carduino -b57600 -D -P $PORT
