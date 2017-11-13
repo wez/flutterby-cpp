@@ -28,10 +28,7 @@ void set_sleep_mode(SleepMode mode) {
   Cpu::smcr = (Cpu::smcr & CpuSmcrFlags::SE) | flags;
 }
 
-static volatile uint8_t PENDING = 0;
-void set_event_pending() {
-  PENDING = 1;
-}
+volatile uint8_t PENDING = 0;
 
 inline void sleep_enable() {
   Cpu::smcr |= CpuSmcrFlags::SE;

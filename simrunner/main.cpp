@@ -2,6 +2,7 @@
 #include <simavr/sim_elf.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 const char *firmware_filename = nullptr;
 
@@ -25,7 +26,8 @@ console_write(struct avr_t* avr, avr_io_addr_t addr, uint8_t v, void* param) {
     AVR_LOG(
         avr,
         LOG_OUTPUT,
-        "%s: %s\n",
+        "%ld: %s: %s\n",
+        time(nullptr),
         firmware_filename,
         avr->io_console_buffer.buf);
     avr->io_console_buffer.len = 0;

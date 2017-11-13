@@ -9,7 +9,7 @@ namespace flutterby {
 
 class Timer1 {
  public:
-  enum ClockSource {
+  enum class ClockSource {
     None = u8(Tc1Tccr1bFlags::Tc1Tccr1bFlags::CS1_NO_CLOCK_SOURCE_STOPPED),
     Prescale1 = u8(Tc1Tccr1bFlags::Tc1Tccr1bFlags::CS1_RUNNING_NO_PRESCALING),
     Prescale8 = u8(Tc1Tccr1bFlags::Tc1Tccr1bFlags::CS1_RUNNING_CLK8),
@@ -43,12 +43,42 @@ class Timer1 {
     FastPwmOutputCompare = B_WGM13 | B_WGM12 | A_WGM11 | A_WGM10,
   };
 
+  static inline void configure(WaveformGenerationMode wgm, u16 period_us) {
+    u32 cycles = (F_CPU / 1000000) * period_us;
+    u32 kResolution = 0xffff;
+    ClockSource clock;
+    if (cycles < kResolution) {
+      clock = ClockSource::Prescale1;
+    } else if ((cycles >>= 3) < kResolution) {
+      clock = ClockSource::Prescale8;
+    } else if ((cycles >>= 3) < kResolution) {
+      clock = ClockSource::Prescale64;
+    } else if ((cycles >>= 2) < kResolution) {
+      clock = ClockSource::Prescale256;
+    } else if ((cycles >>= 2) < kResolution) {
+      clock = ClockSource::Prescale1024;
+    } else {
+      panic("period_us is too large for Timer1"_P);
+    }
+
+    configure(clock, wgm, cycles-1);
+  }
+
   static inline void
   configure(ClockSource clock, WaveformGenerationMode wgm, u16 compareA = 0) {
-    auto a = bitflags<Tc1Tccr1aFlags::Tc1Tccr1aFlags, u8>::from_raw_bits(u16(wgm) & 0xff);
-    auto b = bitflags<Tc1Tccr1bFlags::Tc1Tccr1bFlags, u8>::from_raw_bits(clock | (u16(wgm) >> 8));
+    auto a = bitflags<Tc1Tccr1aFlags::Tc1Tccr1aFlags, u8>::from_raw_bits(
+        u16(wgm) & 0xff);
+    auto b = bitflags<Tc1Tccr1bFlags::Tc1Tccr1bFlags, u8>::from_raw_bits(
+        u16(clock) | (u16(wgm) >> 8));
 
     interrupt_free([&]() {
+      Tc1::tccr1a.clear();
+      Tc1::tccr1b.clear();
+      Tc1::tcnt1 = 0;
+      // Clear timer compare interrupt flags for channels A and B
+      Tc1::tifr1 = Tc1Tifr1Flags::OCF1A;
+      Tc1::tifr1 = Tc1Tifr1Flags::OCF1B;
+
       Tc1::tccr1a = a;
       Tc1::tccr1b = b;
 
@@ -56,8 +86,9 @@ class Timer1 {
         Tc1::ocr1a = compareA;
         Tc1::timsk1 = Tc1Timsk1Flags::OCIE1A;
       } else {
-        Tc1::timsk1 &= ~Tc1Timsk1Flags::OCIE1A;
+        Tc1::timsk1.clear();
       }
+      Tc0::gtccr.clear();
     });
   }
 
@@ -67,7 +98,7 @@ class Timer1 {
       if (compare) {
         Tc1::timsk1 = Tc1Timsk1Flags::OCIE1A;
       } else {
-        Tc1::timsk1 ^= Tc1Timsk1Flags::OCIE1A;
+        Tc1::timsk1 &= ~Tc1Timsk1Flags::OCIE1A;
       }
     });
   }

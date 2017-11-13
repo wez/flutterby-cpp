@@ -4,11 +4,18 @@
 
 namespace flutterby {
 namespace eventloop {
-static constexpr float kTimer1Hz = 50.0;
-static constexpr u32 kPrescaler = 1024;
-static constexpr u16 kCompareA =
-    u16((float(F_CPU) / (kTimer1Hz * float(kPrescaler))) - 1);
-static constexpr u16 kTicksPerMs = u16(1000.0 / kTimer1Hz);
+static constexpr u32 kTimer1Hz = 100;
+static constexpr u32 kTicksPerMs = 1000 * kTimer1Hz;
+}
+
+// Convert a number of seconds into a number of ticks
+constexpr u16 operator"" _s(unsigned long long int val) {
+  return val * eventloop::kTimer1Hz;
+}
+
+// Convert a number of milliseconds into a number of ticks
+constexpr u16 operator"" _ms(unsigned long long int val) {
+  return val * eventloop::kTimer1Hz / 1000;
 }
 
 class TimerBase {

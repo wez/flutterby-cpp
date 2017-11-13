@@ -3,6 +3,7 @@
 #include "flutterby/Types.h"
 #include "flutterby/Progmem.h"
 #include "flutterby/New.h"
+#include "flutterby/Debug.h"
 
 /** The Result type borrows from its namesake in Rust.
  * It forces the programmer to consider the possibility of error.
@@ -16,7 +17,14 @@ struct Infallible {};
 [[noreturn]] extern void
 panicImpl(FlashString file, u16 line, FlashString reason);
 
+[[noreturn]] extern void
+panicImpl();
+
+#if HAVE_DBG
 #define panic(reason) panicImpl(__FILE__ ""_P, __LINE__, reason)
+#else
+#define panic(reason) panicImpl()
+#endif
 
 template <typename Value, typename ErrorType>
 class[[nodiscard]] Result {

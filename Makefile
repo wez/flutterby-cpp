@@ -1,10 +1,11 @@
 #MCU=atmega32u4
 #F_CPU=8000000
 
+DEBUG_ENABLE=-DHAVE_SIMAVR=1 -Wl,--section-start=.mmcu=0x910000
 MCU=atmega328p
 F_CPU=16000000
 
-AVR_CXXFLAGS=-std=c++17 -fno-exceptions -g -mmcu=$(MCU) -MMD -MF $@.d -MP -Wa,-adln=$@.s -fverbose-asm -Os -DHAVE_SIMAVR=1 -DF_CPU=$(F_CPU) -Wl,--section-start=.mmcu=0x910000 -Itarget/$(MCU) -Iinclude -I/usr/local/include
+AVR_CXXFLAGS=-std=c++17 -fno-exceptions -g -mmcu=$(MCU) -MMD -MF $@.d -MP -Wa,-adln=$@.s -fverbose-asm -Os $(DEBUG_ENABLE) -DF_CPU=$(F_CPU) -Itarget/$(MCU) -Iinclude -I/usr/local/include
 
 all: target/$(MCU)/blink.elf
 
@@ -43,9 +44,9 @@ target/$(MCU)/tests/%.elf: tests/%.cpp target/$(MCU)/avr_autogen.h target/$(MCU)
 target/lib$(MCU).a: $(LIBOBJS)
 	avr-ar rcu $@ $(LIBOBJS)
 
-target/$(MCU)/blink.elf: examples/blink.cpp include/flutterby/bitflags.h target/$(MCU)/avr_autogen.h target/lib$(MCU).a target/$(MCU)/testmain.o
+target/$(MCU)/blink.elf: examples/blink.cpp include/flutterby/bitflags.h target/$(MCU)/avr_autogen.h target/lib$(MCU).a
 	@mkdir -p $(@D)
-	avr-g++ $(AVR_CXXFLAGS) -o $@ $< -Ltarget -l$(MCU) target/$(MCU)/testmain.o
+	avr-g++ $(AVR_CXXFLAGS) -o $@ $< -Ltarget -l$(MCU)
 	avr-size --format=avr --mcu=$(MCU) $@
 
 sim: target/blink.elf target/simrunner

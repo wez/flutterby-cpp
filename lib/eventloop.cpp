@@ -60,16 +60,15 @@ bool TimerBase::tick_all(u16 elapsed) {
 namespace eventloop {
 
 IRQ_TIMER1_COMPA {
+//  DBG() << "COMPA"_P;
   ++TICKS;
   set_event_pending();
 }
 
 static void setup_timer() {
   Timer1::configure(
-      Timer1::ClockSource::Prescale1024,
-      Timer1::WaveformGenerationMode::ClearOnTimerMatchInputCapture,
-      kCompareA);
-
+      Timer1::WaveformGenerationMode::ClearOnTimerMatchOutputCompare,
+      1000000 / kTimer1Hz);
   // Some bootloaders let us get this far without interrupts enabled;
   // ensure that they are turned on for the remainder of operation
   __builtin_avr_sei();

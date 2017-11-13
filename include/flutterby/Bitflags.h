@@ -47,6 +47,13 @@ public:
     return bitflags(bits);
   }
 
+  void clear() {
+    value_ = 0;
+  }
+  void clear() volatile {
+    value_ = 0;
+  }
+
   /** Yield the raw bits */
   constexpr Int raw_bits() const {
     return value_;
