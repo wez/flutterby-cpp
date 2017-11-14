@@ -48,7 +48,7 @@ class Serial0TxStream {
     }
 };
 
-#define TXSER() FormatStream<Serial0TxStream, true>().stream()
+#define TXSER() FormatStream<Serial0TxStream, kFormatStreamCRLF>().stream()
 
 
 }

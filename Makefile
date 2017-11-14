@@ -1,8 +1,7 @@
 #MCU=atmega32u4
-#F_CPU=8000000
 
 MCU?=atmega328p
-F_CPU?=16000000
+F_CPU?=8000000
 
 ifeq (1,${DEBUG})
 DEBUG_ENABLE=-DHAVE_SIMAVR=1 -Wl,--section-start=.mmcu=0x910000
@@ -35,9 +34,11 @@ $(TDIR)/avr_autogen.h: target/debug/atdf2cpp
 	@mkdir -p $(@D)
 	cargo run -p atdf2cpp $(MCU) $@
 
-target/simrunner: simrunner/main.cpp
+SIMSRCS=simrunner/main.cpp simrunner/ds1338_virt.cpp
+
+target/simrunner: $(SIMSRCS)
 	@mkdir -p $(@D)
-	$(CXX) -std=c++11 -o $@ -lsimavr -lelf $<
+	$(CXX) -std=c++11 -o $@ -lsimavr -lelf $(SIMSRCS)
 
 $(TDIR)/lib/%.o: lib/%.cpp $(TDIR)/avr_autogen.h
 	@mkdir -p $(@D)
@@ -82,8 +83,14 @@ $(TDIR)/testmain.o: simrunner/testmain.cpp
 	avr-g++ $(AVR_CXXFLAGS) -c -o $@ $<
 
 .PHONY: t
+
+ifeq (1,${DEBUG})
 t: target/simrunner $(TESTEXE)
 	for t in $(TESTEXE) ; do target/simrunner $$t && echo "OK: $$t" || exit 1 ; done
+else
+t:
+	$(MAKE) DEBUG=1 t
+endif
 
 #simavr -m $(MCU) -f $(F_CPU) -v -v -v -v -v target/blink.elf
 

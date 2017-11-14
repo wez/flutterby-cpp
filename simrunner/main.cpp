@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <simavr/avr_twi.h>
+
+#include "ds1338_virt.h"
 
 const char *firmware_filename = nullptr;
 
@@ -47,6 +50,7 @@ int main(int argc, char** argv) {
   firmware_filename = argv[1];
 
   elf_firmware_t f = {{0}};
+  ds1338_virt_t rtc;
 
   // Suppress firmware loading messages on the assumption that it will succeed
   avr_global_logger_set(logger);
@@ -60,6 +64,10 @@ int main(int argc, char** argv) {
   avr_init(avr);
   avr->log = LOG_OUTPUT;
   avr_load_firmware(avr, &f);
+
+  ds1338_virt_init(avr, &rtc);
+  ds1338_virt_attach_twi(&rtc, AVR_IOCTL_TWI_GETIRQ(0));
+  rtc.verbose = false;
 
   // Gnarly poking here replaces the default _avr_io_console_write
   // callback for the simavr console with our implementation that

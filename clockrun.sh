@@ -4,7 +4,7 @@ PORT=/dev/cu.usbserial-A106TF8G
 set -e
 
 MCU=atmega328p
-F_CPU=16000000
+F_CPU=8000000
 elf=target/$MCU/examples/$example.elf
 hex=target/$MCU/examples/$example.hex
 

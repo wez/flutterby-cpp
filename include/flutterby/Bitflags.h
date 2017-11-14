@@ -70,6 +70,13 @@ public:
     return value_;
   }
 
+  constexpr operator bool() {
+    return value_ != 0;
+  }
+  constexpr operator bool() volatile {
+    return value_ != 0;
+  }
+
   constexpr bool operator==(const Bitflags&other) {
     return value_ == other.value_;
   }
