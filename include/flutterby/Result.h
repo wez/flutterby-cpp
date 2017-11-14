@@ -404,12 +404,12 @@ constexpr Result<ValueType, ErrorType> Error(ErrorType&& value) {
  * result is an error then the macro will return the result immediately.
  * Otherwise the macro evaluates to the ValueType of the result.
  */
-#define Try(expr)                     \
-  ({                                  \
-    auto __result = expr;             \
-    if (__result.is_err()) {         \
-      return __result; \
-    }                                 \
-    __result.value();                 \
+#define Try(expr)            \
+  ({                         \
+    auto __result = expr;    \
+    if (__result.is_err()) { \
+      return __result;       \
+    }                        \
+    __result.value();        \
   })
 }
