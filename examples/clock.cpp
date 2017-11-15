@@ -4,6 +4,7 @@
 #include "flutterby/Serial0.h"
 #include "flutterby/I2c.h"
 #include "flutterby/Gpio.h"
+#include "flutterby/Timer0.h"
 
 /** This is intended to drive an atmega328p in the Solder Time Desk Clock */
 
@@ -105,6 +106,61 @@ static void select_column(u8 col) {
   ColumnSelect::write(col);
 }
 
+static const u8 matrix_data[20] = {
+  0b1001100,
+  0b1100110,
+  0b1001100,
+  0b1100110,
+  0b1001100,
+  0b1100110,
+  0b1001100,
+  0b1100110,
+  0b1001100,
+  0b1100110,
+  0b1001100,
+  0b1100110,
+  0b1001100,
+  0b1100110,
+  0b1001100,
+  0b1100110,
+  0b1001100,
+  0b1100110,
+  0b1001100,
+  0b1100110,
+};
+
+static void led_tick() {
+  static volatile int col_num = 0;
+
+  auto decoder = col_num / 8;
+  auto sub_col = col_num % 8;
+
+  select_decoder(decoder);
+  select_column(col_num % 8);
+  RowPins::write(matrix_data[col_num]);
+
+  // PWM to select brightness level
+  u8 bright = 0x20;
+  for (u8 i = 0; i < bright; ++i) {
+    __asm__ __volatile__ ("nop");
+    __asm__ __volatile__ ("nop");
+  }
+  RowPins::write(0);
+  for (u8 i = bright; i!= 0; ++i) {
+    __asm__ __volatile__ ("nop");
+    __asm__ __volatile__ ("nop");
+  }
+
+  if (++col_num > 19) {
+    col_num = 0;
+  }
+
+}
+
+IRQ_TIMER0_COMPA {
+  led_tick();
+}
+
 int main() {
   __builtin_avr_cli();
 #ifdef HAVE_AVR_WDT
@@ -119,6 +175,10 @@ int main() {
   RowPins::setup();
   DecoderSelect::setup();
   ColumnSelect::setup();
+
+  Timer0::configure(
+      Timer0::WaveformGenerationMode::ClearOnTimerMatchOutputCompare,
+      100);
 
   auto timer = make_timer(2_s, true, [] {
                  TXSER() << "Boop"_P;
@@ -135,33 +195,6 @@ int main() {
                }).value();
   eventloop::enable_timer(timer);
 
-  int row_num = 0;
-  int col_num = 0;
-
-  auto led_timer = make_timer(1_s, true, [&row_num, &col_num]() mutable {
-                     auto decoder = col_num / 8;
-                     auto sub_col = col_num % 8;
-                     TXSER() << "row: "_P << row_num << " col: "_P << col_num
-                             << " decoder:"_P << decoder << " sub_col:"_P
-                             << sub_col;
-
-                     // Deactivate LEDs before we select a different
-                     // column to avoid visual artifacts
-                     RowPins::write(0);
-                     select_decoder(decoder);
-                     select_column(col_num % 8);
-                     RowPins::write(1<<row_num);
-
-                     if (++col_num > 19) {
-                       col_num = 0;
-
-                       if (++row_num > 6) {
-                         row_num = 0;
-                       }
-                     }
-
-                   }).value();
-  eventloop::enable_timer(led_timer);
 
   eventloop::run_forever();
 

@@ -6,19 +6,19 @@
 namespace flutterby {
 
 
-class Timer1 {
+class Timer0 {
  public:
   enum class ClockSource {
-    None = u8(Tc1Tccr1bFlags::Tc1Tccr1bFlags::CS1_NO_CLOCK_SOURCE_STOPPED),
-    Prescale1 = u8(Tc1Tccr1bFlags::Tc1Tccr1bFlags::CS1_RUNNING_NO_PRESCALING),
-    Prescale8 = u8(Tc1Tccr1bFlags::Tc1Tccr1bFlags::CS1_RUNNING_CLK8),
-    Prescale64 = u8(Tc1Tccr1bFlags::Tc1Tccr1bFlags::CS1_RUNNING_CLK64),
-    Prescale256 = u8(Tc1Tccr1bFlags::Tc1Tccr1bFlags::CS1_RUNNING_CLK256),
-    Prescale1024 = u8(Tc1Tccr1bFlags::Tc1Tccr1bFlags::CS1_RUNNING_CLK1024),
+    None = u8(Tc0Tccr0bFlags::Tc0Tccr0bFlags::CS0_NO_CLOCK_SOURCE_STOPPED),
+    Prescale1 = u8(Tc0Tccr0bFlags::Tc0Tccr0bFlags::CS0_RUNNING_NO_PRESCALING),
+    Prescale8 = u8(Tc0Tccr0bFlags::Tc0Tccr0bFlags::CS0_RUNNING_CLK8),
+    Prescale64 = u8(Tc0Tccr0bFlags::Tc0Tccr0bFlags::CS0_RUNNING_CLK64),
+    Prescale256 = u8(Tc0Tccr0bFlags::Tc0Tccr0bFlags::CS0_RUNNING_CLK256),
+    Prescale1024 = u8(Tc0Tccr0bFlags::Tc0Tccr0bFlags::CS0_RUNNING_CLK1024),
     ExternalFalling =
-        u8(Tc1Tccr1bFlags::Tc1Tccr1bFlags::CS1_RUNNING_EXTCLK_TX_FALLING_EDGE),
+        u8(Tc0Tccr0bFlags::Tc0Tccr0bFlags::CS0_RUNNING_EXTCLK_TX_FALLING_EDGE),
     ExternalRising =
-        u8(Tc1Tccr1bFlags::Tc1Tccr1bFlags::CS1_RUNNING_EXTCLK_TX_RISING_EDGE),
+        u8(Tc0Tccr0bFlags::Tc0Tccr0bFlags::CS0_RUNNING_EXTCLK_TX_RISING_EDGE),
   };
   static constexpr auto A_WGM10 = 1 << 0;
   static constexpr auto A_WGM11 = 1 << 1;
@@ -28,7 +28,7 @@ class Timer1 {
     Normal = 0,
     PwmPhaseCorrect8Bit = A_WGM10,
     PwmPhaseCorrect9Bit = A_WGM11,
-    PwmPhaseCorrect10Bit = A_WGM11 | A_WGM10,
+    PwmPhaseCorrect00Bit = A_WGM11 | A_WGM10,
     ClearOnTimerMatchOutputCompare = B_WGM12,
     FastPwm8Bit = B_WGM12 | A_WGM10,
     FastPwm9Bit = B_WGM12 | A_WGM11,
@@ -44,7 +44,7 @@ class Timer1 {
 
   static inline void configure(WaveformGenerationMode wgm, u16 period_us) {
     u32 cycles = (F_CPU / 1000000) * period_us;
-    static constexpr u32 kResolution = 0xffff;
+    static constexpr u32 kResolution = 0xff;
     ClockSource clock;
     if (cycles < kResolution) {
       clock = ClockSource::Prescale1;
@@ -57,35 +57,35 @@ class Timer1 {
     } else if ((cycles >>= 2) < kResolution) {
       clock = ClockSource::Prescale1024;
     } else {
-      panic("period_us is too large for Timer1"_P);
+      panic("period_us is too large for Timer0"_P);
     }
 
     configure(clock, wgm, cycles-1);
   }
 
   static inline void
-  configure(ClockSource clock, WaveformGenerationMode wgm, u16 compareA = 0) {
-    auto a = bitflags<Tc1Tccr1aFlags::Tc1Tccr1aFlags, u8>::from_raw_bits(
+  configure(ClockSource clock, WaveformGenerationMode wgm, u8 compareA = 0) {
+    auto a = bitflags<Tc0Tccr0aFlags::Tc0Tccr0aFlags, u8>::from_raw_bits(
         u16(wgm) & 0xff);
-    auto b = bitflags<Tc1Tccr1bFlags::Tc1Tccr1bFlags, u8>::from_raw_bits(
+    auto b = bitflags<Tc0Tccr0bFlags::Tc0Tccr0bFlags, u8>::from_raw_bits(
         u16(clock) | (u16(wgm) >> 8));
 
     interrupt_free([&]() {
-      Tc1::tccr1a.clear();
-      Tc1::tccr1b.clear();
-      Tc1::tcnt1 = 0;
+      Tc0::tccr0a.clear();
+      Tc0::tccr0b.clear();
+      Tc0::tcnt0 = 0;
       // Clear timer compare interrupt flags for channels A and B
-      Tc1::tifr1 = Tc1Tifr1Flags::OCF1A;
-      Tc1::tifr1 = Tc1Tifr1Flags::OCF1B;
+      Tc0::tifr0 = Tc0Tifr0Flags::OCF0A;
+      Tc0::tifr0 = Tc0Tifr0Flags::OCF0B;
 
-      Tc1::tccr1a = a;
-      Tc1::tccr1b = b;
+      Tc0::tccr0a = a;
+      Tc0::tccr0b = b;
 
       if (compareA) {
-        Tc1::ocr1a = compareA;
-        Tc1::timsk1 = Tc1Timsk1Flags::OCIE1A;
+        Tc0::ocr0a = compareA;
+        Tc0::timsk0 = Tc0Timsk0Flags::OCIE0A;
       } else {
-        Tc1::timsk1.clear();
+        Tc0::timsk0.clear();
       }
       Tc0::gtccr.clear();
     });
@@ -93,28 +93,28 @@ class Timer1 {
 
   static inline void setCompareA(u16 compare) {
     interrupt_free([&]() {
-      Tc1::ocr1a = compare;
+      Tc0::ocr0a = compare;
       if (compare) {
-        Tc1::timsk1 = Tc1Timsk1Flags::OCIE1A;
+        Tc0::timsk0 = Tc0Timsk0Flags::OCIE0A;
       } else {
-        Tc1::timsk1 &= ~Tc1Timsk1Flags::OCIE1A;
+        Tc0::timsk0 &= ~Tc0Timsk0Flags::OCIE0A;
       }
     });
   }
 
   static inline void setCount(u16 count) {
-    Tc1::tcnt1 = count;
+    Tc0::tcnt0 = count;
   }
 
   static inline u16 getCount() {
-    return Tc1::tcnt1;
+    return Tc0::tcnt0;
   }
 
   static inline void configureOverflowInterrupt(bool enable) {
     if (enable) {
-      Tc1::timsk1 |= Tc1Timsk1Flags::TOIE1;
+      Tc0::timsk0 |= Tc0Timsk0Flags::TOIE0;
     } else {
-      Tc1::timsk1 &= ~Tc1Timsk1Flags::TOIE1;
+      Tc0::timsk0 &= ~Tc0Timsk0Flags::TOIE0;
     }
   }
 
