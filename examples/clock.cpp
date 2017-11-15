@@ -6,6 +6,9 @@
 #include "flutterby/Gpio.h"
 #include "flutterby/Timer0.h"
 
+#include "gfxfont.h"
+#include "TomThumb.h"
+
 /** This is intended to drive an atmega328p in the Solder Time Desk Clock */
 
 using namespace flutterby;
@@ -106,28 +109,60 @@ static void select_column(u8 col) {
   ColumnSelect::write(col);
 }
 
-static const u8 matrix_data[20] = {
-  0b1001100,
-  0b1100110,
-  0b1001100,
-  0b1100110,
-  0b1001100,
-  0b1100110,
-  0b1001100,
-  0b1100110,
-  0b1001100,
-  0b1100110,
-  0b1001100,
-  0b1100110,
-  0b1001100,
-  0b1100110,
-  0b1001100,
-  0b1100110,
-  0b1001100,
-  0b1100110,
-  0b1001100,
-  0b1100110,
+// We use double buffering so that writes to the screen
+// don't flicker
+static volatile u8 matrix_data[2][20];
+static volatile u8 active_matrix = 0;
+
+static void clear_screen() {
+  u8 screen = (active_matrix + 1) & 1;
+  for (u8 i = 0; i < sizeof(matrix_data[screen]); ++i) {
+    matrix_data[screen][i] = 0;
+  }
+}
+
+u8 render_char_at(u8 screen, u8 x, u8 y, u8 c) {
+  c -= progmem_deref(&TomThumb.first);
+  auto glyph = &(progmem_deref(&TomThumb.glyph)[c]);
+  auto bitmap = progmem_deref(&TomThumb.bitmap);
+
+  auto bo = progmem_deref(&glyph->bitmapOffset);
+  auto w = progmem_deref(&glyph->width);
+  auto h = progmem_deref(&glyph->height);
+  int8_t xo = progmem_deref(&glyph->xOffset),
+         yo = progmem_deref(&glyph->yOffset);
+  uint8_t xx, yy, bits = 0, bit = 0;
+
+  for (yy = 0; yy < h; yy++) {
+    for (xx = 0; xx < w; xx++) {
+      if (!(bit++ & 7)) {
+        bits = progmem_deref(&bitmap[bo++]);
+      }
+      if (bits & 0x80) {
+        matrix_data[screen][x + xo + xx] |= 1 << (y + yo + yy);
+      }
+      bits <<= 1;
+    }
+  }
+
+  // Return the visible width of the character
+  return progmem_deref(&glyph->xAdvance);
+}
+
+class ThumbStream {
+  u8 x_{0};
+ public:
+
+  void operator()(uint8_t b) {
+    if (x_ >= 20) {
+      return;
+    }
+    u8 screen = (active_matrix + 1) & 1;
+    x_ += render_char_at(screen, x_, 7, b);
+  }
 };
+
+#define MATRIX() FormatStream<ThumbStream, kFormatStreamNone>().stream()
 
 static void led_tick() {
   static volatile int col_num = 0;
@@ -137,7 +172,7 @@ static void led_tick() {
 
   select_decoder(decoder);
   select_column(col_num % 8);
-  RowPins::write(matrix_data[col_num]);
+  RowPins::write(matrix_data[active_matrix][col_num]);
 
   // PWM to select brightness level
   u8 bright = 0x20;
@@ -154,7 +189,6 @@ static void led_tick() {
   if (++col_num > 19) {
     col_num = 0;
   }
-
 }
 
 IRQ_TIMER0_COMPA {
@@ -180,17 +214,36 @@ int main() {
       Timer0::WaveformGenerationMode::ClearOnTimerMatchOutputCompare,
       100);
 
+  clear_screen();
+  MATRIX() << "w00t!!!"_P;
+
   auto timer = make_timer(2_s, true, [] {
-                 TXSER() << "Boop"_P;
                  auto res = read_time();
                  if (res.is_ok()) {
+
                    auto time = move(res.value());
+#if 0
                    TXSER() << time.hours << ":"_P << time.minutes << ":"_P
                            << time.seconds << " day:"_P << time.day
                            << " date:"_P << time.date << " month:"_P
                            << time.month << " year:"_P << time.year;
+#endif
+
+                   auto out = MATRIX();
+                   clear_screen();
+                   if (time.hours < 10) {
+                     out << "0"_P;
+                   }
+                   out << time.hours;
+                   out << ":"_P;
+                   if (time.minutes < 10) {
+                     out << "0"_P;
+                   }
+                   out << time.minutes;
+
+                   active_matrix = (active_matrix + 1) & 1;
                  } else {
-                   TXSER() << "failed to read i2c: "_P << u8(res.error());
+                   MATRIX() << "i2c: "_P << u8(res.error());
                  }
                }).value();
   eventloop::enable_timer(timer);
