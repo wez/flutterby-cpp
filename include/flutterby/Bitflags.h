@@ -62,11 +62,11 @@ public:
   }
 
   /** Yield the raw bits */
-  constexpr Int raw_bits() const {
+  constexpr Int &raw_bits() {
     return value_;
   }
 
-  constexpr Int raw_bits() const volatile {
+  constexpr volatile Int& raw_bits() volatile {
     return value_;
   }
 
