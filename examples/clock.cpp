@@ -9,7 +9,10 @@
 #include "gfxfont.h"
 #include "TomThumb.h"
 
-/** This is intended to drive an atmega328p in the Solder Time Desk Clock */
+/** This is intended to drive an atmega328p in the Solder Time Desk Clock.
+ * Schematic for the board is here:
+ * http://www.spikenzielabs.com/Downloadables/stdeskclock/STDC_Schematic.pdf
+ */
 
 using namespace flutterby;
 
@@ -33,6 +36,8 @@ struct bcd_time {
   u8 month;
   u8 year;
 };
+
+static bcd_time last_read_time;
 
 static inline u8 decode_bcd(u8 x) {
   return ((x >> 4) * 10 + (x & 0x0F));
@@ -89,6 +94,11 @@ using SB = gpio::OutputPin<gpio::PortD, 5>;
 using SC = gpio::OutputPin<gpio::PortD, 6>;
 using ColumnSelect = gpio::OutputPins<SA, SB, SC>;
 
+// Button 0 -> INT0
+using Button0 = gpio::InputPin<gpio::PortD, 2, gpio::kEnablePullUp>;
+// Button 1 -> INT1
+using Button1 = gpio::InputPin<gpio::PortD, 3, gpio::kEnablePullUp>;
+
 static void select_decoder(u8 n) {
   switch (n) {
     case 0:
@@ -113,12 +123,21 @@ static void select_column(u8 col) {
 // don't flicker
 static volatile u8 matrix_data[2][20];
 static volatile u8 active_matrix = 0;
+static volatile u8 brightness = 0x20;
+
+// Button 0 pressed
+IRQ_INT0 {
+  brightness += 0x10;
+}
 
 static void clear_screen() {
   u8 screen = (active_matrix + 1) & 1;
   for (u8 i = 0; i < sizeof(matrix_data[screen]); ++i) {
     matrix_data[screen][i] = 0;
   }
+}
+static void next_screen() {
+  active_matrix = (active_matrix + 1) & 1;
 }
 
 u8 render_char_at(u8 screen, u8 x, u8 y, u8 c) {
@@ -138,8 +157,10 @@ u8 render_char_at(u8 screen, u8 x, u8 y, u8 c) {
       if (!(bit++ & 7)) {
         bits = progmem_deref(&bitmap[bo++]);
       }
-      if (bits & 0x80) {
-        matrix_data[screen][x + xo + xx] |= 1 << (y + yo + yy);
+      auto target_x =  x + xo + xx;
+      auto target_y = y + yo + yy;
+      if ((bits & 0x80) && target_x < 20 && target_x >= 0) {
+        matrix_data[screen][target_x] |= 1 << target_y;
       }
       bits <<= 1;
     }
@@ -164,6 +185,10 @@ class ThumbStream {
 
 #define MATRIX() FormatStream<ThumbStream, kFormatStreamNone>().stream()
 
+static u8 long_message[] = "hello there, scroll me";
+static u8 long_message_len = 22;
+static u8 long_message_pos = 0;
+
 static void led_tick() {
   static volatile int col_num = 0;
 
@@ -175,13 +200,12 @@ static void led_tick() {
   RowPins::write(matrix_data[active_matrix][col_num]);
 
   // PWM to select brightness level
-  u8 bright = 0x20;
-  for (u8 i = 0; i < bright; ++i) {
+  for (u8 i = 0; i < brightness; ++i) {
     __asm__ __volatile__ ("nop");
     __asm__ __volatile__ ("nop");
   }
   RowPins::write(0);
-  for (u8 i = bright; i!= 0; ++i) {
+  for (u8 i = brightness; i!= 0; ++i) {
     __asm__ __volatile__ ("nop");
     __asm__ __volatile__ ("nop");
   }
@@ -210,44 +234,70 @@ int main() {
   DecoderSelect::setup();
   ColumnSelect::setup();
 
+  // Turn on interrupts for the buttons so that we can adjust
+  // the brightness of the display
+  Exint::eicra |= ExintEicraFlags::ISC0_RISING_EDGE_OF_INTX;
+  // This is really a mask but since it covers both int0 and int1,
+  // we're good to just use that here
+  Exint::eimsk.raw_bits() = 1 << 0;
+
   Timer0::configure(
       Timer0::WaveformGenerationMode::ClearOnTimerMatchOutputCompare,
       100);
 
   clear_screen();
   MATRIX() << "w00t!!!"_P;
+  next_screen();
 
-  auto timer = make_timer(2_s, true, [] {
-                 auto res = read_time();
-                 if (res.is_ok()) {
-
-                   auto time = move(res.value());
+  // This periodic task is responsible for re-reading from the RTC.
+  // We do this approximately every second and store the value in
+  // the global last_read_time variable.
+  eventloop::enable_timer(make_timer(1_s, true, [] {
+                            auto res = read_time();
+                            if (res.is_ok()) {
+                              last_read_time = move(res.value());
 #if 0
                    TXSER() << time.hours << ":"_P << time.minutes << ":"_P
                            << time.seconds << " day:"_P << time.day
                            << " date:"_P << time.date << " month:"_P
                            << time.month << " year:"_P << time.year;
 #endif
+                            }
+                          }).value());
 
-                   auto out = MATRIX();
-                   clear_screen();
-                   if (time.hours < 10) {
-                     out << "0"_P;
-                   }
-                   out << time.hours;
-                   out << ":"_P;
-                   if (time.minutes < 10) {
-                     out << "0"_P;
-                   }
-                   out << time.minutes;
+#if 1
+  eventloop::enable_timer(make_timer(2_s, true, [] {
+                            auto out = MATRIX();
+                            clear_screen();
+                            if (last_read_time.hours < 10) {
+                              out << "0"_P;
+                            }
+                            out << last_read_time.hours;
+                            out << ":"_P;
+                            if (last_read_time.minutes < 10) {
+                              out << "0"_P;
+                            }
+                            out << last_read_time.minutes;
+                            next_screen();
+                          }).value());
+#else
+  eventloop::enable_timer(make_timer(200_ms, true, [] {
+                            clear_screen();
+                            u8 x = 0;
+                            u8 i = long_message_pos;
+                            u8 screen = (active_matrix + 1) & 1;
 
-                   active_matrix = (active_matrix + 1) & 1;
-                 } else {
-                   MATRIX() << "i2c: "_P << u8(res.error());
-                 }
-               }).value();
-  eventloop::enable_timer(timer);
+                            while (x < 20) {
+                              x +=
+                                  render_char_at(screen, x, 7, long_message[i]);
+                              i = (i + 1) % long_message_len;
+                            }
 
+                            long_message_pos =
+                                (long_message_pos + 1) % long_message_len;
+                            next_screen();
+                          }).value());
+#endif
 
   eventloop::run_forever();
 
