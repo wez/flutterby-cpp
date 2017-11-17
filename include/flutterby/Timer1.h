@@ -42,7 +42,7 @@ class Timer1 {
     FastPwmOutputCompare = B_WGM13 | B_WGM12 | A_WGM11 | A_WGM10,
   };
 
-  static inline void configure(WaveformGenerationMode wgm, u16 period_us) {
+  static inline void configure(WaveformGenerationMode wgm, u32 period_us) {
     u32 cycles = (F_CPU / 1000000) * period_us;
     static constexpr u32 kResolution = 0xffff;
     ClockSource clock;

@@ -106,17 +106,32 @@ class FormatStream {
   }
 };
 
+#ifdef HAVE_SIMAVR
+# define DBG_ENABLED 1
+#else
+# define DBG_ENABLED 0
+#endif
+
+
 /** A stream implementation that writes to the simavr console */
 class SimavrConsoleStream {
  public:
   void operator()(uint8_t b) {
-#if HAVE_SIMAVR
+#if DBG_ENABLED
     SIMAVR_CONSOLE = b;
 #endif
   }
 };
 
-#define DBG() FormatStream<SimavrConsoleStream, kFormatStreamCR>().stream()
+struct FormatStreamVoidify {
+  template <typename T, u8 NL>
+  void operator&(FormatStream<T, NL>&) {}
+};
+
+#define DBG()                                  \
+  (DBG_ENABLED == 0) ? (void)0                 \
+                     : FormatStreamVoidify{} & \
+          FormatStream<SimavrConsoleStream, kFormatStreamCR>().stream()
 
 template <typename T, u8 NL, typename A, size_t Size>
 FormatStream<T, NL>& operator<<(

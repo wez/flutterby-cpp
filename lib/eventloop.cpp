@@ -14,8 +14,8 @@ volatile u16 TICKS = 0;
 TimerBase::~TimerBase() {}
 
 TimerBase::TimerBase(u16 remaining_ticks, bool repeat)
-    : remaining_ticks_(remaining_ticks),
-      repeat_(repeat ? remaining_ticks : 0) {}
+    : remaining_ticks_(remaining_ticks ? remaining_ticks : 1),
+      repeat_(repeat ? remaining_ticks_ : 0) {}
 
 void TimerBase::spawn(Shared<TimerBase> timer) {
   // Convert the Shared instance into a raw pointer; we promise
@@ -60,7 +60,7 @@ bool TimerBase::tick_all(u16 elapsed) {
 namespace eventloop {
 
 IRQ_TIMER1_COMPA {
-//  DBG() << "COMPA"_P;
+//  DBG() << "COMPA:"_P << TICKS;
   ++TICKS;
   set_event_pending();
 }
@@ -68,7 +68,7 @@ IRQ_TIMER1_COMPA {
 static void setup_timer() {
   Timer1::configure(
       Timer1::WaveformGenerationMode::ClearOnTimerMatchOutputCompare,
-      1000000 / kTimer1Hz);
+      1000000 / kTimerHz);
   // Some bootloaders let us get this far without interrupts enabled;
   // ensure that they are turned on for the remainder of operation
   __builtin_avr_sei();

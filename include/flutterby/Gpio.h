@@ -147,13 +147,15 @@ struct InputPin : Port<PortType> {
 
   static void setup() {
     Port<PortType>::ddr() &= ~mask;
-    if (PULLUP) {
+    if constexpr (PULLUP) {
       Port<PortType>::reg() |= mask;
+    } else {
+      Port<PortType>::reg() &= ~mask;
     }
   }
 
-  static bool read() {
-    return (Port<PortType>::pin() & mask) != 0;
+  static u8 read() {
+    return Port<PortType>::pin() & mask;
   }
 };
 
@@ -180,7 +182,11 @@ struct OutputPin : Port<PortType> {
     x ? set() : clear();
   }
   static inline void toggle() {
-    Port<PortType>::reg() ^= mask;
+    //Port<PortType>::reg() ^= mask;
+    // "Writing a logic one to PINxn toggles the value of PORTxn, independent on
+    // the value of DDRxn".  The compiler is smart enough to translate this next
+    // line to an sbi instruction
+    Port<PortType>::pin() |= mask;
   }
   static inline bool read() {
     return (Port<PortType>::reg() & mask) == mask;

@@ -5,6 +5,7 @@
 #include "flutterby/I2c.h"
 #include "flutterby/Gpio.h"
 #include "flutterby/Timer0.h"
+#include "flutterby/BusyWait.h"
 
 #include "gfxfont.h"
 #include "TomThumb.h"
@@ -99,7 +100,7 @@ using Button0 = gpio::InputPin<gpio::PortD, 2, gpio::kEnablePullUp>;
 // Button 1 -> INT1
 using Button1 = gpio::InputPin<gpio::PortD, 3, gpio::kEnablePullUp>;
 
-static void select_decoder(u8 n) {
+static inline void select_decoder(u8 n) {
   switch (n) {
     case 0:
       DecoderSelect::write(0b01);
@@ -115,7 +116,7 @@ static void select_decoder(u8 n) {
   }
 }
 
-static void select_column(u8 col) {
+static inline void select_column(u8 col) {
   ColumnSelect::write(col);
 }
 
@@ -123,12 +124,6 @@ static void select_column(u8 col) {
 // don't flicker
 static volatile u8 matrix_data[2][20];
 static volatile u8 active_matrix = 0;
-static volatile u8 brightness = 0x20;
-
-// Button 0 pressed
-IRQ_INT0 {
-  brightness += 0x10;
-}
 
 static void clear_screen() {
   u8 screen = (active_matrix + 1) & 1;
@@ -170,7 +165,8 @@ u8 render_char_at(u8 screen, u8 x, u8 y, u8 c) {
   return progmem_deref(&glyph->xAdvance);
 }
 
-class ThumbStream {
+// Render to the not-currently-displayed screen buffer
+class DisplayStream {
   u8 x_{0};
  public:
 
@@ -179,39 +175,43 @@ class ThumbStream {
       return;
     }
     u8 screen = (active_matrix + 1) & 1;
-    x_ += render_char_at(screen, x_, 7, b);
+    x_ += render_char_at(screen, x_, 6, b);
   }
 };
 
-#define MATRIX() FormatStream<ThumbStream, kFormatStreamNone>().stream()
+#define MATRIX() FormatStream<DisplayStream, kFormatStreamNone>().stream()
 
-static u8 long_message[] = "hello there, scroll me";
-static u8 long_message_len = 22;
+static u8 long_message[] = "hello there, scroll me    ";
+static u8 long_message_len = 26;
 static u8 long_message_pos = 0;
+static bool scrolling = false;
 
+// Drives the state machine for the LEDs.
+// Each time we are called we tick through these steps:
+// 1. if "on", turn on the column and set state to "off"
+// 2. if "off", turn off the column, advance to next column
+//    and set the state to "on".
+// The explicit "off" state prevents ghosting/bleeding of the
+// on "pixels" in the subsequent column.
 static void led_tick() {
   static volatile int col_num = 0;
+  static bool on = true;
 
-  auto decoder = col_num / 8;
-  auto sub_col = col_num % 8;
+  if (on) {
+    auto decoder = col_num / 8;
+    auto sub_col = col_num % 8;
 
-  select_decoder(decoder);
-  select_column(col_num % 8);
-  RowPins::write(matrix_data[active_matrix][col_num]);
+    select_decoder(decoder);
+    select_column(col_num % 8);
 
-  // PWM to select brightness level
-  for (u8 i = 0; i < brightness; ++i) {
-    __asm__ __volatile__ ("nop");
-    __asm__ __volatile__ ("nop");
-  }
-  RowPins::write(0);
-  for (u8 i = brightness; i!= 0; ++i) {
-    __asm__ __volatile__ ("nop");
-    __asm__ __volatile__ ("nop");
-  }
-
-  if (++col_num > 19) {
-    col_num = 0;
+    RowPins::write(matrix_data[active_matrix][col_num]);
+    on = false;
+  } else {
+    RowPins::write(0);
+    if (++col_num > 19) {
+      col_num = 0;
+    }
+    on = true;
   }
 }
 
@@ -219,14 +219,25 @@ IRQ_TIMER0_COMPA {
   led_tick();
 }
 
+void read_clock() {
+  auto res = read_time();
+  if (res.is_ok()) {
+    last_read_time = move(res.value());
+#if 0
+                   TXSER() << time.hours << ":"_P << time.minutes << ":"_P
+                           << time.seconds << " day:"_P << time.day
+                           << " date:"_P << time.date << " month:"_P
+                           << time.month << " year:"_P << time.year;
+#endif
+  }
+}
+
 int main() {
   __builtin_avr_cli();
-#ifdef HAVE_AVR_WDT
   __builtin_avr_wdr();
   Wdt::wdtcsr = WdtWdtcsrFlags::WDCE | WdtWdtcsrFlags::WDE;
   Wdt::wdtcsr.clear();
   Cpu::mcusr ^= CpuMcusrFlags::WDRF;
-#endif
   I2cMaster::enable(400000);
   Serial0::configure(9600);
 
@@ -234,70 +245,72 @@ int main() {
   DecoderSelect::setup();
   ColumnSelect::setup();
 
-  // Turn on interrupts for the buttons so that we can adjust
-  // the brightness of the display
-  Exint::eicra |= ExintEicraFlags::ISC0_RISING_EDGE_OF_INTX;
-  // This is really a mask but since it covers both int0 and int1,
-  // we're good to just use that here
-  Exint::eimsk.raw_bits() = 1 << 0;
+  Button0::setup();
+  Button1::setup();
 
+  // Timer0 drives the LED display updates; every 200us we tick
+  // and drive the state machine.
   Timer0::configure(
       Timer0::WaveformGenerationMode::ClearOnTimerMatchOutputCompare,
-      100);
+      200);
 
   clear_screen();
   MATRIX() << "w00t!!!"_P;
   next_screen();
+  read_clock();
+
+  // Show the w00t splash screen for 2 seconds, then turn on
+  // the clock display.
+  __builtin_avr_sei();
+  busy_wait_ms(2000);
 
   // This periodic task is responsible for re-reading from the RTC.
   // We do this approximately every second and store the value in
   // the global last_read_time variable.
-  eventloop::enable_timer(make_timer(1_s, true, [] {
-                            auto res = read_time();
-                            if (res.is_ok()) {
-                              last_read_time = move(res.value());
-#if 0
-                   TXSER() << time.hours << ":"_P << time.minutes << ":"_P
-                           << time.seconds << " day:"_P << time.day
-                           << " date:"_P << time.date << " month:"_P
-                           << time.month << " year:"_P << time.year;
-#endif
-                            }
-                          }).value());
+  eventloop::enable_timer(make_timer(1_s, true, read_clock).value());
 
-#if 1
-  eventloop::enable_timer(make_timer(2_s, true, [] {
-                            auto out = MATRIX();
-                            clear_screen();
-                            if (last_read_time.hours < 10) {
-                              out << "0"_P;
-                            }
-                            out << last_read_time.hours;
-                            out << ":"_P;
-                            if (last_read_time.minutes < 10) {
-                              out << "0"_P;
-                            }
-                            out << last_read_time.minutes;
-                            next_screen();
-                          }).value());
-#else
-  eventloop::enable_timer(make_timer(200_ms, true, [] {
-                            clear_screen();
-                            u8 x = 0;
-                            u8 i = long_message_pos;
-                            u8 screen = (active_matrix + 1) & 1;
+  eventloop::enable_timer(
+      make_timer(300_ms, true, [] {
+        clear_screen();
 
-                            while (x < 20) {
-                              x +=
-                                  render_char_at(screen, x, 7, long_message[i]);
-                              i = (i + 1) % long_message_len;
-                            }
+        if (!scrolling && !Button1::read()) {
+          scrolling = true;
+        } else if (scrolling && long_message_pos > 3 && !Button1::read()) {
+          // Allow stopping the scroll, but effectively de-bounce
+          // by deferring looking at the button until we've scrolled
+          // a bit
+          scrolling = false;
+        }
 
-                            long_message_pos =
-                                (long_message_pos + 1) % long_message_len;
-                            next_screen();
-                          }).value());
-#endif
+        if (scrolling) {
+          u8 x = 0;
+          u8 i = long_message_pos;
+          u8 screen = (active_matrix + 1) & 1;
+
+          while (x < 20) {
+            x += render_char_at(screen, x, 6, long_message[i]);
+            i = (i + 1) % long_message_len;
+          }
+
+          long_message_pos = (long_message_pos + 1) % long_message_len;
+          if (long_message_pos == 0) {
+            scrolling = false;
+          }
+        } else {
+          auto out = MATRIX();
+          if (last_read_time.hours < 10) {
+            out << "0"_P;
+          }
+          out << last_read_time.hours;
+          out << ":"_P;
+          if (last_read_time.minutes < 10) {
+            out << "0"_P;
+          }
+          out << last_read_time.minutes;
+        }
+
+        next_screen();
+      }).value());
 
   eventloop::run_forever();
 
